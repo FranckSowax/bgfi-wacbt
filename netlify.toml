@@ -12,10 +12,14 @@
 
 # Configuration des fonctions
 [functions]
-  # Répertoire contenant les modules Node
+  # Bundler pour les fonctions
   node_bundler = "esbuild"
   # Inclure les fichiers nécessaires
   included_files = ["backend/**", "node_modules/.prisma/**"]
+
+# Timeout étendu pour les fonctions (26s max sur Pro)
+[functions."api"]
+  external_node_modules = ["@prisma/client", "prisma"]
 
 # ============================================
 # Redirections API -> Netlify Functions
@@ -28,7 +32,7 @@
   status = 200
   force = true
 
-# Webhooks -> Fonction serverless
+# Webhooks Respond.io -> Fonction serverless
 [[redirects]]
   from = "/webhooks/*"
   to = "/.netlify/functions/api/api/webhooks/:splat"
@@ -52,7 +56,7 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' /.netlify/functions/* https://*.supabase.co"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' /.netlify/functions/* https://*.supabase.co https://api.respond.io"
 
 # Cache pour les assets statiques
 [[headers]]
@@ -61,13 +65,49 @@
     Cache-Control = "public, max-age=31536000, immutable"
 
 # ============================================
-# Variables d'environnement requises
+# TOUTES les variables d'environnement requises
 # (à configurer dans Netlify Dashboard > Site settings > Environment variables)
 # ============================================
-# DATABASE_URL = "postgresql://user:pass@host:5432/db?pgbouncer=true"
-# JWT_SECRET = "your-secret-key"
-# OPENAI_API_KEY = "sk-..."
-# SUPABASE_URL = "https://xxx.supabase.co"
-# SUPABASE_SERVICE_KEY = "..."
-# RESPOND_IO_API_KEY = "..."
-# CLIENT_URL = "https://your-site.netlify.app"
+#
+# --- Base de données (Supabase PostgreSQL) ---
+# DATABASE_URL              = "postgresql://postgres:MOT_DE_PASSE@db.xxx.supabase.co:5432/postgres?pgbouncer=true"
+#
+# --- Supabase (RAG + Vector DB) ---
+# SUPABASE_URL              = "https://xxx.supabase.co"
+# SUPABASE_SERVICE_KEY      = "eyJhbGciOiJIUzI1NiIs..."
+# SUPABASE_ANON_KEY         = "eyJhbGciOiJIUzI1NiIs..."
+#
+# --- Authentification JWT ---
+# JWT_SECRET                = "votre-secret-jwt-32-caracteres-minimum"
+# JWT_EXPIRES_IN            = "7d"
+#
+# --- Respond.io (WhatsApp Business API) ---
+# RESPOND_IO_API_KEY        = "votre-cle-api-respond-io"
+# RESPOND_IO_CHANNEL_ID     = "votre-channel-id-whatsapp"
+# RESPOND_IO_WEBHOOK_SECRET = "votre-secret-webhook-respond-io"
+#
+# --- OpenAI (RAG Chatbot Cassiopée) ---
+# OPENAI_API_KEY            = "sk-..."
+# OPENAI_MODEL              = "gpt-4"
+#
+# --- RAG Service ---
+# RAG_SERVICE_URL           = "https://votre-rag-service.fly.dev"
+#
+# --- Configuration RAG ---
+# CHUNK_SIZE                = "1000"
+# CHUNK_OVERLAP             = "200"
+# TOP_K                     = "5"
+# SIMILARITY_THRESHOLD      = "0.75"
+#
+# --- Application ---
+# CLIENT_URL                = "https://votre-site.netlify.app"
+# NODE_ENV                  = "production"
+#
+# --- Redis (Upstash pour serverless) ---
+# REDIS_URL                 = "rediss://default:xxx@xxx.upstash.io:6379"
+# REDIS_HOST                = "xxx.upstash.io"
+# REDIS_PORT                = "6379"
+#
+# --- Campagnes ---
+# CAMPAIGN_BATCH_SIZE       = "100"
+# CAMPAIGN_RATE_LIMIT       = "80"
