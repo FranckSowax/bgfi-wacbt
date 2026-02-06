@@ -1,0 +1,34 @@
+# Configuration Netlify pour BGFI WhatsApp Marketing SaaS
+
+[build]
+  # Pas de commande de build nécessaire (HTML statique)
+  command = "echo 'Static site - no build required'"
+  # Répertoire de publication
+  publish = "."
+
+# Redirection SPA (Single Page Application)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers de sécurité
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.bgfi-whatsapp.ga https://*.supabase.co"
+
+# Cache pour les assets statiques
+[[headers]]
+  for = "/public/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Variables d'environnement (à configurer dans Netlify Dashboard)
+# VITE_API_URL = "https://api.bgfi-whatsapp.ga"
+# VITE_SUPABASE_URL = "https://votre-projet.supabase.co"
+# VITE_SUPABASE_ANON_KEY = "votre_anon_key"
