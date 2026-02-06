@@ -58,15 +58,33 @@ app.get('/api/health', (req, res) => {
 
 // Database connection test
 app.get('/api/debug/db', async (req, res) => {
+  const dns = require('dns');
+  const dbUrl = process.env.DATABASE_URL || '';
+  const hostMatch = dbUrl.match(/@([^:\/]+)/);
+  const host = hostMatch ? hostMatch[1] : 'unknown';
+  const portMatch = dbUrl.match(/:(\d+)\//);
+  const port = portMatch ? portMatch[1] : 'unknown';
+
+  // DNS resolution test
+  let dnsResult = {};
+  try {
+    const addresses4 = await new Promise((resolve, reject) => dns.resolve4(host, (err, a) => err ? reject(err) : resolve(a)));
+    dnsResult.ipv4 = addresses4;
+  } catch(e) { dnsResult.ipv4 = 'NONE: ' + e.code; }
+  try {
+    const addresses6 = await new Promise((resolve, reject) => dns.resolve6(host, (err, a) => err ? reject(err) : resolve(a)));
+    dnsResult.ipv6 = addresses6;
+  } catch(e) { dnsResult.ipv6 = 'NONE: ' + e.code; }
+
   try {
     const { PrismaClient } = require('@prisma/client');
     const prisma = new PrismaClient();
     const userCount = await prisma.user.count();
     const contactCount = await prisma.contact.count();
     await prisma.$disconnect();
-    res.json({ ok: true, users: userCount, contacts: contactCount, dbUrl: process.env.DATABASE_URL ? 'set (' + process.env.DATABASE_URL.substring(0, 30) + '...)' : 'NOT SET', jwtSecret: process.env.JWT_SECRET ? 'set' : 'NOT SET' });
+    res.json({ ok: true, users: userCount, contacts: contactCount, host, port, dns: dnsResult, jwtSecret: process.env.JWT_SECRET ? 'set' : 'NOT SET' });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message, dbUrl: process.env.DATABASE_URL ? 'set' : 'NOT SET' });
+    res.status(500).json({ ok: false, error: err.message.substring(0, 300), host, port, dns: dnsResult, jwtSecret: process.env.JWT_SECRET ? 'set' : 'NOT SET' });
   }
 });
 
