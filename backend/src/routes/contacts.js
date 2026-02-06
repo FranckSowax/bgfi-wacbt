@@ -11,9 +11,9 @@ const { contactsTotal } = require('../utils/metrics');
 
 const prisma = new PrismaClient();
 
-// Configuration de multer pour l'upload de fichiers
+// Configuration de multer (memoire pour serverless - pas d'acces disque)
 const upload = multer({
-  dest: 'uploads/',
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB
   },
@@ -221,8 +221,7 @@ router.post('/import', authenticate, authorize(['contact:import']), uploadLimite
       return res.status(400).json({ error: 'Fichier requis' });
     }
 
-    const fs = require('fs');
-    const fileContent = fs.readFileSync(req.file.path, 'utf-8');
+    const fileContent = req.file.buffer.toString('utf-8');
 
     // Parser le CSV
     const records = csv.parse(fileContent, {
