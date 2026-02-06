@@ -8,6 +8,7 @@ require('dotenv').config();
 const logger = require('./utils/logger');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { errorHandler } = require('./middleware/errorHandler');
+const { register } = require('./utils/metrics');
 
 // Routes
 const authRoutes = require('./routes/auth');

@@ -1,31 +1,59 @@
 const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
-const Redis = require('ioredis');
+const logger = require('../utils/logger');
 
-// Client Redis
-const redisClient = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379
-});
+// ============================================
+// Configuration Redis (optionnel)
+// Fallback sur in-memory si Redis non disponible
+// ============================================
+
+let storeConfig = {};
+let redisClient = null;
+
+const redisEnabled = process.env.REDIS_ENABLED !== 'false' && process.env.REDIS_HOST;
+
+if (redisEnabled) {
+  try {
+    const RedisStore = require('rate-limit-redis');
+    const Redis = require('ioredis');
+
+    redisClient = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        if (times > 3) return null;
+        return Math.min(times * 200, 2000);
+      }
+    });
+
+    redisClient.on('error', (err) => {
+      logger.warn('Redis error, using in-memory fallback', { error: err.message });
+    });
+
+    storeConfig = {
+      store: new RedisStore({ client: redisClient, prefix: 'rl:' })
+    };
+
+    logger.info('Rate limiting: using Redis store');
+  } catch (error) {
+    logger.warn('Redis not available, using in-memory rate limiting');
+  }
+} else {
+  logger.info('Rate limiting: using in-memory store (Redis disabled)');
+}
 
 // ============================================
 // Rate limiter général pour l'API
 // ============================================
 const apiLimiter = rateLimit({
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'rl:api:'
-  }),
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // 1000 requêtes par minute
+  ...storeConfig,
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     error: 'Trop de requêtes',
     message: 'Veuillez réessayer plus tard'
-  },
-  handler: (req, res, next, options) => {
-    res.status(options.statusCode).json(options.message);
   }
 });
 
@@ -33,12 +61,9 @@ const apiLimiter = rateLimit({
 // Rate limiter pour les campagnes
 // ============================================
 const campaignLimiter = rateLimit({
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'rl:campaign:'
-  }),
-  windowMs: 60 * 60 * 1000, // 1 heure
-  max: 10, // 10 campagnes par heure
+  ...storeConfig,
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   message: {
     error: 'Limite de campagnes atteinte',
     message: 'Vous ne pouvez créer que 10 campagnes par heure'
@@ -49,12 +74,9 @@ const campaignLimiter = rateLimit({
 // Rate limiter pour l'authentification
 // ============================================
 const authLimiter = rateLimit({
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'rl:auth:'
-  }),
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 tentatives par 15 minutes
+  ...storeConfig,
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   skipSuccessfulRequests: true,
   message: {
     error: 'Trop de tentatives',
@@ -66,14 +88,10 @@ const authLimiter = rateLimit({
 // Rate limiter pour le chatbot
 // ============================================
 const chatbotLimiter = rateLimit({
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'rl:chatbot:'
-  }),
-  windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 messages par minute
+  ...storeConfig,
+  windowMs: 60 * 1000,
+  max: 30,
   keyGenerator: (req) => {
-    // Utiliser le sessionId ou l'IP comme clé
     return req.body.sessionId || req.ip;
   },
   message: {
@@ -86,12 +104,9 @@ const chatbotLimiter = rateLimit({
 // Rate limiter pour les uploads
 // ============================================
 const uploadLimiter = rateLimit({
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'rl:upload:'
-  }),
-  windowMs: 60 * 60 * 1000, // 1 heure
-  max: 10, // 10 uploads par heure
+  ...storeConfig,
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   message: {
     error: 'Limite d\'upload atteinte',
     message: 'Vous ne pouvez uploader que 10 fichiers par heure'
