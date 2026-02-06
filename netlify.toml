@@ -1,18 +1,50 @@
-# Configuration Netlify pour BGFI WhatsApp Marketing SaaS
+# ============================================
+# BGFI WhatsApp Marketing SaaS - Netlify Config
+# ============================================
 
 [build]
-  # Pas de commande de build nécessaire (HTML statique)
-  command = "echo 'Static site - no build required'"
-  # Répertoire de publication
+  # Commande de build (installe deps + génère Prisma Client)
+  command = "npm install && npm run build"
+  # Répertoire de publication pour le frontend
   publish = "."
+  # Répertoire des fonctions serverless
+  functions = "netlify/functions"
 
-# Redirection SPA (Single Page Application)
+# Configuration des fonctions
+[functions]
+  # Répertoire contenant les modules Node
+  node_bundler = "esbuild"
+  # Inclure les fichiers nécessaires
+  included_files = ["backend/**", "node_modules/.prisma/**"]
+
+# ============================================
+# Redirections API -> Netlify Functions
+# ============================================
+
+# API endpoints -> Fonction serverless
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+# Webhooks -> Fonction serverless
+[[redirects]]
+  from = "/webhooks/*"
+  to = "/.netlify/functions/api/api/webhooks/:splat"
+  status = 200
+  force = true
+
+# SPA fallback (doit être en dernier)
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
+# ============================================
 # Headers de sécurité
+# ============================================
+
 [[headers]]
   for = "/*"
   [headers.values]
@@ -20,7 +52,7 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.bgfi-whatsapp.ga https://*.supabase.co"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' /.netlify/functions/* https://*.supabase.co"
 
 # Cache pour les assets statiques
 [[headers]]
@@ -28,7 +60,14 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Variables d'environnement (à configurer dans Netlify Dashboard)
-# VITE_API_URL = "https://api.bgfi-whatsapp.ga"
-# VITE_SUPABASE_URL = "https://votre-projet.supabase.co"
-# VITE_SUPABASE_ANON_KEY = "votre_anon_key"
+# ============================================
+# Variables d'environnement requises
+# (à configurer dans Netlify Dashboard > Site settings > Environment variables)
+# ============================================
+# DATABASE_URL = "postgresql://user:pass@host:5432/db?pgbouncer=true"
+# JWT_SECRET = "your-secret-key"
+# OPENAI_API_KEY = "sk-..."
+# SUPABASE_URL = "https://xxx.supabase.co"
+# SUPABASE_SERVICE_KEY = "..."
+# RESPOND_IO_API_KEY = "..."
+# CLIENT_URL = "https://your-site.netlify.app"

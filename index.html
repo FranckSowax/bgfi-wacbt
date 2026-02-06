@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BGFI WhatsApp Marketing SaaS</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        bgfi: { primary: '#1e3a5f', secondary: '#2d5a87', accent: '#00a86b', light: '#f8fafc', dark: '#0f172a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #f1f5f9; }
+        .gradient-bg { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
+        .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .typing-indicator span { animation: typing 1.4s infinite; display: inline-block; width: 8px; height: 8px; background: #9ca3af; border-radius: 50%; margin: 0 2px; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icons
+        const Icons = {
+            LayoutDashboard: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+            Send: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>,
+            MessageSquare: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+            Users: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+            FileText: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>,
+            BarChart3: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>,
+            Settings: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+            Plus: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+            Search: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
+            Filter: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46 22,3"/></svg>,
+            MoreVertical: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>,
+            Upload: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            Bot: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>,
+            Trash2: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>,
+            Edit: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+            Play: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5,3 19,12 5,21 5,3"/></svg>,
+            CheckCircle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>,
+            Clock: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>,
+            TrendingUp: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/><polyline points="17,6 23,6 23,12"/></svg>,
+            Eye: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+            MousePointer: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>,
+            Download: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+            Database: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>,
+            Sparkles: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>,
+            Menu: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+            X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+            Phone: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+            Mail: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+            Calendar: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+            RefreshCw: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+            Copy: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+        };
+
+        // Mock Data
+        const mockCampaigns = [
+            { id: 1, name: 'Relance App Mobile - Janvier', status: 'completed', sent: 25000, delivered: 24200, read: 18900, clicked: 4200, date: '2026-01-15', type: 'reactivation' },
+            { id: 2, name: 'Nouvelle Vidéo Tutoriel', status: 'running', sent: 15000, delivered: 14500, read: 11200, clicked: 2800, date: '2026-02-01', type: 'tutorial' },
+            { id: 3, name: 'Maintenance Programmée', status: 'scheduled', sent: 0, delivered: 0, read: 0, clicked: 0, date: '2026-02-10', type: 'notification' },
+            { id: 4, name: 'Nouvelle Fonctionnalité', status: 'draft', sent: 0, delivered: 0, read: 0, clicked: 0, date: null, type: 'feature' },
+        ];
+
+        const mockContacts = [
+            { id: 1, name: 'Jean Dupont', phone: '+241 74 12 34 56', email: 'jean.dupont@email.com', segment: 'inactif', lastActivity: '2025-11-20', status: 'active' },
+            { id: 2, name: 'Marie Claire', phone: '+241 66 23 45 67', email: 'marie.claire@email.com', segment: 'actif', lastActivity: '2026-01-28', status: 'active' },
+            { id: 3, name: 'Pierre Martin', phone: '+241 74 34 56 78', email: 'pierre.martin@email.com', segment: 'inactif', lastActivity: '2025-10-15', status: 'active' },
+            { id: 4, name: 'Sophie Ndong', phone: '+241 66 45 67 89', email: 'sophie.ndong@email.com', segment: 'nouveau', lastActivity: '2026-02-05', status: 'active' },
+            { id: 5, name: 'Alain Moussa', phone: '+241 74 56 78 90', email: 'alain.moussa@email.com', segment: 'inactif', lastActivity: '2025-09-30', status: 'unsubscribed' },
+        ];
+
+        const mockTemplates = [
+            { id: 1, name: 'Relance Connexion', category: 'marketing', status: 'approved', content: 'Bonjour {{1}} ! Votre application BGFI vous attend. Reconnectez-vous en 1 clic : {{2}}' },
+            { id: 2, name: 'Nouveau Tutoriel', category: 'utility', status: 'approved', content: 'Decouvrez notre nouveau tutoriel "{{1}}" : {{2}}' },
+            { id: 3, name: 'Code OTP', category: 'authentication', status: 'approved', content: 'Votre code de verification BGFI est : {{1}}. Valide 5 minutes.' },
+            { id: 4, name: 'Maintenance Info', category: 'utility', status: 'pending', content: 'Maintenance programmee le {{1}} de {{2}} a {{3}}.' },
+        ];
+
+        const mockKnowledgeBase = [
+            { id: 1, name: 'FAQ_BGFI_2026.pdf', type: 'pdf', size: '2.4 MB', uploadedAt: '2026-01-10', status: 'indexed' },
+            { id: 2, name: 'Tarifs_Complets.xlsx', type: 'excel', size: '856 KB', uploadedAt: '2026-01-12', status: 'indexed' },
+            { id: 3, name: 'Procedures_Virements.docx', type: 'word', size: '1.2 MB', uploadedAt: '2026-01-15', status: 'indexed' },
+        ];
+
+        const mockChatHistory = [
+            { id: 1, role: 'user', content: 'Bonjour, comment puis-je recupérer mes identifiants ?', timestamp: '10:30' },
+            { id: 2, role: 'bot', content: 'Bonjour ! Pour recuperer vos identifiants BGFI, vous pouvez :\n\n1. Cliquer sur "Mot de passe oublie" sur l\'application\n2. Appeler le service client au 0770 12 34 56\n3. Vous rendre en agence avec une piece d\'identite\n\nSouhaitez-vous que je vous envoie le lien direct ?', timestamp: '10:31' },
+        ];
+
+        // Components
+        const Button = ({ children, onClick, variant = 'primary', size = 'md', className = '', disabled = false, icon: Icon }) => {
+            const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+            const variants = {
+                primary: 'bg-bgfi-primary text-white hover:bg-bgfi-secondary shadow-md hover:shadow-lg',
+                secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 shadow-sm',
+                accent: 'bg-bgfi-accent text-white hover:bg-emerald-600 shadow-md hover:shadow-lg',
+                danger: 'bg-red-500 text-white hover:bg-red-600 shadow-md',
+                ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+            };
+            const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2 text-sm', lg: 'px-6 py-3 text-base' };
+            return <button onClick={onClick} disabled={disabled} className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}>{Icon && <Icon />}{children}</button>;
+        };
+
+        const Card = ({ children, className = '', title, action }) => (
+            <div className={`bg-white rounded-xl card-shadow hover-lift ${className}`}>
+                {(title || action) && <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">{title && <h3 className="text-lg font-semibold text-gray-900">{title}</h3>}{action && <div>{action}</div>}</div>}
+                <div className="p-6">{children}</div>
+            </div>
+        );
+
+        const Badge = ({ children, variant = 'default' }) => {
+            const variants = { default: 'bg-gray-100 text-gray-700', success: 'bg-emerald-100 text-emerald-700', warning: 'bg-amber-100 text-amber-700', danger: 'bg-red-100 text-red-700', info: 'bg-blue-100 text-blue-700', primary: 'bg-bgfi-primary text-white' };
+            return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]}`}>{children}</span>;
+        };
+
+        const Input = ({ label, type = 'text', placeholder, value, onChange, className = '', icon: Icon }) => (
+            <div className={`space-y-1 ${className}`}>
+                {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
+                <div className="relative">{Icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><Icon /></div>}<input type={type} value={value} onChange={(e) => onChange && onChange(e.target.value)} placeholder={placeholder} className={`block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm ${Icon ? 'pl-10' : 'px-4'} py-2.5 border`} /></div>
+            </div>
+        );
+
+        const Select = ({ label, value, onChange, options, className = '' }) => (
+            <div className={`space-y-1 ${className}`}>
+                {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
+                <select value={value} onChange={(e) => onChange && onChange(e.target.value)} className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-2.5 border">{options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select>
+            </div>
+        );
+
+        const ProgressBar = ({ value, max = 100, color = 'bg-bgfi-primary', size = 'md' }) => {
+            const percentage = Math.min((value / max) * 100, 100);
+            const sizes = { sm: 'h-1.5', md: 'h-2', lg: 'h-3' };
+            return <div className={`w-full bg-gray-200 rounded-full ${sizes[size]}`}><div className={`${color} rounded-full transition-all duration-500 ${sizes[size]}`} style={{ width: `${percentage}%` }} /></div>;
+        };
+
+        const StatCard = ({ title, value, change, changeType = 'positive', icon: Icon, color = 'blue' }) => {
+            const colors = { blue: 'bg-blue-50 text-blue-600', green: 'bg-emerald-50 text-emerald-600', amber: 'bg-amber-50 text-amber-600', purple: 'bg-purple-50 text-purple-600', red: 'bg-red-50 text-red-600' };
+            return <Card className="h-full"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-gray-600">{title}</p><p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>{change && <div className="flex items-center mt-2"><span className={`text-sm font-medium ${changeType === 'positive' ? 'text-emerald-600' : 'text-red-600'}`}>{`${changeType === 'positive' ? '+' : ''}${change}%`}</span><span className="text-sm text-gray-500 ml-1">vs mois dernier</span></div>}</div>{Icon && <div className={`p-3 rounded-xl ${colors[color]}`}><Icon /></div>}</div></Card>;
+        };
+
+        // Main App
+        const BGFIWhatsAppSaaS = () => {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+
+            const menuItems = [
+                { id: 'dashboard', label: 'Tableau de bord', icon: Icons.LayoutDashboard },
+                { id: 'campaigns', label: 'Campagnes', icon: Icons.Send },
+                { id: 'chatbot', label: 'Chatbot RAG', icon: Icons.Bot },
+                { id: 'contacts', label: 'Contacts', icon: Icons.Users },
+                { id: 'templates', label: 'Templates', icon: Icons.FileText },
+                { id: 'analytics', label: 'Analytics', icon: Icons.BarChart3 },
+                { id: 'settings', label: 'Paramètres', icon: Icons.Settings },
+            ];
+
+            const renderContent = () => {
+                switch (activeTab) {
+                    case 'dashboard': return <DashboardView />;
+                    case 'campaigns': return <CampaignsView />;
+                    case 'chatbot': return <ChatbotView />;
+                    case 'contacts': return <ContactsView />;
+                    case 'templates': return <TemplatesView />;
+                    case 'analytics': return <AnalyticsView />;
+                    case 'settings': return <SettingsView />;
+                    default: return <DashboardView />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 flex">
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center"><span className="text-white font-bold text-lg">B</span></div>
+                                <div><h1 className="font-bold text-gray-900 text-sm">BGFI Marketing</h1><p className="text-xs text-gray-500">WhatsApp SaaS</p></div>
+                            </div>
+                            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-700"><Icons.X /></button>
+                        </div>
+                        <nav className="p-4 space-y-1">
+                            {menuItems.map(item => (
+                                <button key={item.id} onClick={() => setActiveTab(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === item.id ? 'bg-bgfi-primary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
+                                    <item.icon />{item.label}
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+                            <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
+                                <div className="w-10 h-10 bg-bgfi-accent rounded-full flex items-center justify-center text-white font-semibold">AD</div>
+                                <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900 truncate">Admin BGFI</p><p className="text-xs text-gray-500 truncate">admin@bgfi.ga</p></div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <div className="flex-1 flex flex-col min-w-0">
+                        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8">
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><Icons.Menu /></button>
+                                <h2 className="text-xl font-semibold text-gray-900">{menuItems.find(item => item.id === activeTab)?.label}</h2>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg relative"><Icons.MessageSquare /><span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" /></button>
+                                <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><Icons.Settings /></button>
+                            </div>
+                        </header>
+
+                        <main className="flex-1 overflow-auto p-4 lg:p-8">
+                            <div className="max-w-7xl mx-auto animate-fade-in">{renderContent()}</div>
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        // Dashboard View
+        const DashboardView = () => {
+            useEffect(() => {
+                const ctx1 = document.getElementById('campaignsChart');
+                const ctx2 = document.getElementById('engagementChart');
+                if (ctx1) {
+                    new Chart(ctx1, { type: 'line', data: { labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'], datasets: [{ label: 'Messages Envoyés', data: [15000, 22000, 18000, 25000, 28000, 32000], borderColor: '#1e3a5f', backgroundColor: 'rgba(30, 58, 95, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+                }
+                if (ctx2) {
+                    new Chart(ctx2, { type: 'doughnut', data: { labels: ['Lus', 'Non lus', 'Échoués'], datasets: [{ data: [78, 15, 7], backgroundColor: ['#00a86b', '#f59e0b', '#ef4444'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%' } });
+                }
+            }, []);
+
+            return (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard title="Campagnes Actives" value="3" change="50" icon={Icons.Send} color="blue" />
+                        <StatCard title="Messages Envoyés" value="64.2K" change="23" icon={Icons.MessageSquare} color="green" />
+                        <StatCard title="Taux d'Ouverture" value="78.2%" change="5.2" icon={Icons.Eye} color="purple" />
+                        <StatCard title="Taux de Clic" value="22.4%" change="8.1" icon={Icons.MousePointer} color="amber" />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card title="Évolution des Campagnes" className="lg:col-span-2" action={<Button variant="ghost" size="sm" icon={Icons.Download}>Exporter</Button>}>
+                            <div className="h-64"><canvas id="campaignsChart" /></div>
+                        </Card>
+                        <Card title="Engagement">
+                            <div className="h-48"><canvas id="engagementChart" /></div>
+                            <div className="mt-4 space-y-2">
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">Lus</span><span className="font-medium text-emerald-600">78%</span></div>
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">Non lus</span><span className="font-medium text-amber-600">15%</span></div>
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">Échoués</span><span className="font-medium text-red-600">7%</span></div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Campagnes Récentes" action={<Button variant="ghost" size="sm">Voir tout</Button>}>
+                            <div className="space-y-4">
+                                {mockCampaigns.slice(0, 3).map(campaign => (
+                                    <div key={campaign.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${campaign.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : campaign.status === 'running' ? 'bg-blue-100 text-blue-600' : campaign.status === 'scheduled' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
+                                                {campaign.status === 'completed' ? <Icons.CheckCircle /> : campaign.status === 'running' ? <Icons.Play /> : campaign.status === 'scheduled' ? <Icons.Clock /> : <Icons.FileText />}
+                                            </div>
+                                            <div><p className="font-medium text-gray-900">{campaign.name}</p><p className="text-sm text-gray-500">{campaign.sent.toLocaleString()} envoyés • {campaign.date}</p></div>
+                                        </div>
+                                        <Badge variant={campaign.status === 'completed' ? 'success' : campaign.status === 'running' ? 'info' : campaign.status === 'scheduled' ? 'warning' : 'default'}>{campaign.status === 'completed' ? 'Terminée' : campaign.status === 'running' ? 'En cours' : campaign.status === 'scheduled' ? 'Planifiée' : 'Brouillon'}</Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                        <Card title="Actions Rapides">
+                            <div className="grid grid-cols-2 gap-4">
+                                <button className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl text-left hover:shadow-md transition-all group">
+                                    <div className="w-12 h-12 bg-bgfi-primary rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><Icons.Plus /></div>
+                                    <p className="font-semibold text-gray-900">Nouvelle Campagne</p><p className="text-sm text-gray-600 mt-1">Créer une campagne WhatsApp</p>
+                                </button>
+                                <button className="p-6 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl text-left hover:shadow-md transition-all group">
+                                    <div className="w-12 h-12 bg-bgfi-accent rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><Icons.Upload /></div>
+                                    <p className="font-semibold text-gray-900">Importer Contacts</p><p className="text-sm text-gray-600 mt-1">CSV ou Excel</p>
+                                </button>
+                                <button className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl text-left hover:shadow-md transition-all group">
+                                    <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><Icons.Bot /></div>
+                                    <p className="font-semibold text-gray-900">Configurer Chatbot</p><p className="text-sm text-gray-600 mt-1">RAG & Base de connaissances</p>
+                                </button>
+                                <button className="p-6 bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl text-left hover:shadow-md transition-all group">
+                                    <div className="w-12 h-12 bg-amber-600 rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><Icons.FileText /></div>
+                                    <p className="font-semibold text-gray-900">Nouveau Template</p><p className="text-sm text-gray-600 mt-1">Message WhatsApp</p>
+                                </button>
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
+        // Campaigns View
+        const CampaignsView = () => {
+            const [showCreateModal, setShowCreateModal] = useState(false);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <Input placeholder="Rechercher une campagne..." icon={Icons.Search} className="w-64" />
+                            <Button variant="secondary" size="sm" icon={Icons.Filter}>Filtrer</Button>
+                        </div>
+                        <Button onClick={() => setShowCreateModal(true)} icon={Icons.Plus}>Nouvelle Campagne</Button>
+                    </div>
+
+                    <Card>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Campagne</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Envoyés</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Délivrés</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Lus</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Clics</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Date</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {mockCampaigns.map(campaign => (
+                                        <tr key={campaign.id} className="hover:bg-gray-50">
+                                            <td className="py-4 px-4"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-bgfi-primary/10 rounded-xl flex items-center justify-center text-bgfi-primary"><Icons.Send /></div><div><p className="font-medium text-gray-900">{campaign.name}</p><p className="text-sm text-gray-500">{campaign.type}</p></div></div></td>
+                                            <td className="py-4 px-4"><Badge variant={campaign.status === 'completed' ? 'success' : campaign.status === 'running' ? 'info' : campaign.status === 'scheduled' ? 'warning' : 'default'}>{campaign.status === 'completed' ? 'Terminée' : campaign.status === 'running' ? 'En cours' : campaign.status === 'scheduled' ? 'Planifiée' : 'Brouillon'}</Badge></td>
+                                            <td className="py-4 px-4 text-sm text-gray-900">{campaign.sent.toLocaleString()}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-900">{campaign.delivered.toLocaleString()}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-900">{campaign.read.toLocaleString()}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-900">{campaign.clicked.toLocaleString()}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-500">{campaign.date || '-'}</td>
+                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2">{campaign.status === 'draft' && <Button variant="ghost" size="sm" icon={Icons.Play} />}<Button variant="ghost" size="sm" icon={Icons.Edit} /><Button variant="ghost" size="sm" icon={Icons.MoreVertical} /></div></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+
+                    {showCreateModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <h2 className="text-xl font-semibold text-gray-900">Nouvelle Campagne WhatsApp</h2>
+                                    <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <Input label="Nom de la campagne" placeholder="Ex: Relance App Mobile - Février" />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Select label="Type de campagne" options={[{ value: '', label: 'Sélectionner...' }, { value: 'reactivation', label: 'Réactivation' }, { value: 'tutorial', label: 'Tutoriel' }, { value: 'notification', label: 'Notification' }, { value: 'feature', label: 'Nouvelle fonctionnalité' }]} />
+                                        <Select label="Template" options={[{ value: '', label: 'Sélectionner...' }, { value: '1', label: 'Relance Connexion' }, { value: '2', label: 'Nouveau Tutoriel' }, { value: '3', label: 'Maintenance Info' }]} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Select label="Segment" options={[{ value: '', label: 'Sélectionner...' }, { value: 'all', label: 'Tous les contacts' }, { value: 'inactif', label: 'Inactifs' }, { value: 'actif', label: 'Actifs' }, { value: 'nouveau', label: 'Nouveaux' }]} />
+                                        <Input label="Date d'envoi" type="datetime-local" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                                        <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="4" placeholder="Bonjour {{nom}} ! Votre application BGFI vous attend..." defaultValue="Bonjour {{nom}} ! Votre application BGFI vous attend. Reconnectez-vous en 1 clic : {{lien}}" />
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Aperçu :</strong> Cette campagne ciblera environ <strong>25,000 contacts</strong> du segment sélectionné.</p></div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Annuler</Button>
+                                    <Button onClick={() => setShowCreateModal(false)} icon={Icons.CheckCircle}>Créer la campagne</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Chatbot RAG View
+        const ChatbotView = () => {
+            const [messages, setMessages] = useState(mockChatHistory);
+            const [inputMessage, setInputMessage] = useState('');
+            const [isTyping, setIsTyping] = useState(false);
+            const [activeTab, setActiveTab] = useState('chat');
+            const [uploadedFiles, setUploadedFiles] = useState(mockKnowledgeBase);
+            const messagesEndRef = useRef(null);
+
+            useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+            const handleSendMessage = () => {
+                if (!inputMessage.trim()) return;
+                const newMessage = { id: Date.now(), role: 'user', content: inputMessage, timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
+                setMessages(prev => [...prev, newMessage]);
+                setInputMessage('');
+                setIsTyping(true);
+                setTimeout(() => {
+                    const botResponses = ['Je comprends votre demande. Laissez-moi consulter la base de connaissances BGFI...', "D'apres notre documentation, voici la procedure :\n\n1. Connectez-vous a l'application\n2. Allez dans 'Parametres'\n3. Selectionnez 'Securite'\n4. Cliquez sur 'Modifier mon code'", 'Pour plus d\'informations, je vous invite a consulter notre FAQ ou a contacter le service client au 0770 12 34 56.'];
+                    const botMessage = { id: Date.now() + 1, role: 'bot', content: botResponses[Math.floor(Math.random() * botResponses.length)], timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
+                    setMessages(prev => [...prev, botMessage]);
+                    setIsTyping(false);
+                }, 1500);
+            };
+
+            const handleFileUpload = (e) => {
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    const newFile = { id: Date.now(), name: file.name, type: file.name.split('.').pop(), size: (file.size / 1024 / 1024).toFixed(2) + ' MB', uploadedAt: new Date().toISOString().split('T')[0], status: 'processing' };
+                    setUploadedFiles(prev => [newFile, ...prev]);
+                    setTimeout(() => { setUploadedFiles(prev => prev.map(f => f.id === newFile.id ? { ...f, status: 'indexed' } : f)); }, 3000);
+                });
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex items-center gap-2 border-b border-gray-200">
+                        <button onClick={() => setActiveTab('chat')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'chat' ? 'border-bgfi-primary text-bgfi-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Test du Chatbot</button>
+                        <button onClick={() => setActiveTab('knowledge')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'knowledge' ? 'border-bgfi-primary text-bgfi-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Base de Connaissances</button>
+                        <button onClick={() => setActiveTab('config')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'config' ? 'border-bgfi-primary text-bgfi-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Configuration RAG</button>
+                    </div>
+
+                    {activeTab === 'chat' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <Card className="lg:col-span-2" title="Conversation de Test">
+                                <div className="h-96 overflow-y-auto space-y-4 mb-4 pr-2">
+                                    {messages.map(msg => (
+                                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-bgfi-primary text-white rounded-br-md' : 'bg-gray-100 text-gray-900 rounded-bl-md'}`}>
+                                                <p className="text-sm whitespace-pre-line">{msg.content}</p>
+                                                <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-500'}`}>{msg.timestamp}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isTyping && <div className="flex justify-start"><div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3"><div className="typing-indicator"><span /><span /><span /></div></div></div>}
+                                    <div ref={messagesEndRef} />
+                                </div>
+                                <div className="flex gap-2">
+                                    <input type="text" value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Écrivez votre message..." className="flex-1 rounded-xl border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary px-4 py-3 border" />
+                                    <Button onClick={handleSendMessage} icon={Icons.Send}>Envoyer</Button>
+                                </div>
+                            </Card>
+
+                            <div className="space-y-6">
+                                <Card title="Statistiques du Bot">
+                                    <div className="space-y-4">
+                                        <div><div className="flex justify-between text-sm mb-1"><span className="text-gray-600">Précision RAG</span><span className="font-medium text-gray-900">94.2%</span></div><ProgressBar value={94.2} color="bg-emerald-500" /></div>
+                                        <div><div className="flex justify-between text-sm mb-1"><span className="text-gray-600">Taux de Satisfaction</span><span className="font-medium text-gray-900">87.5%</span></div><ProgressBar value={87.5} color="bg-blue-500" /></div>
+                                        <div><div className="flex justify-between text-sm mb-1"><span className="text-gray-600">Documents Indexés</span><span className="font-medium text-gray-900">42</span></div><ProgressBar value={84} max={50} color="bg-purple-500" /></div>
+                                    </div>
+                                </Card>
+                                <Card title="Suggestions Rapides">
+                                    <div className="space-y-2">
+                                        {['Comment récupérer mes identifiants ?', 'Quels sont les frais de virement ?', 'Comment activer la biométrie ?', 'Comment faire un retrait ?'].map((suggestion, i) => (
+                                            <button key={i} onClick={() => setInputMessage(suggestion)} className="w-full text-left px-4 py-3 text-sm text-gray-700 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">{suggestion}</button>
+                                        ))}
+                                    </div>
+                                </Card>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'knowledge' && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <Input placeholder="Rechercher un document..." icon={Icons.Search} className="w-80" />
+                                    <Select options={[{ value: '', label: 'Tous les types' }, { value: 'pdf', label: 'PDF' }, { value: 'excel', label: 'Excel' }, { value: 'word', label: 'Word' }]} />
+                                </div>
+                                <div>
+                                    <input type="file" multiple onChange={handleFileUpload} className="hidden" id="file-upload" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" />
+                                    <label htmlFor="file-upload"><Button variant="primary" icon={Icons.Upload} onClick={() => document.getElementById('file-upload').click()}>Uploader un document</Button></label>
+                                </div>
+                            </div>
+                            <Card>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Document</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Type</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Taille</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Uploadé le</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {uploadedFiles.map(file => (
+                                                <tr key={file.id} className="hover:bg-gray-50">
+                                                    <td className="py-4 px-4"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${file.type === 'pdf' ? 'bg-red-100 text-red-600' : file.type === 'excel' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}><Icons.FileText /></div><span className="font-medium text-gray-900">{file.name}</span></div></td>
+                                                    <td className="py-4 px-4 text-sm text-gray-600 uppercase">{file.type}</td>
+                                                    <td className="py-4 px-4 text-sm text-gray-600">{file.size}</td>
+                                                    <td className="py-4 px-4 text-sm text-gray-600">{file.uploadedAt}</td>
+                                                    <td className="py-4 px-4"><Badge variant={file.status === 'indexed' ? 'success' : 'warning'}>{file.status === 'indexed' ? 'Indexé' : 'En cours...'}</Badge></td>
+                                                    <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="sm" icon={Icons.Eye} /><Button variant="ghost" size="sm" icon={Icons.Trash2} /></div></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {activeTab === 'config' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Paramètres RAG">
+                                <div className="space-y-6">
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Modèle LLM</label><Select value="gpt-4" options={[{ value: 'gpt-4', label: 'GPT-4 (Recommandé)' }, { value: 'gpt-3.5', label: 'GPT-3.5 Turbo' }, { value: 'claude', label: 'Claude 3' }, { value: 'local', label: 'Modèle Local (LLaMA)' }]} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Nombre de chunks (contexte)</label><input type="range" min="1" max="10" defaultValue="5" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>1</span><span>5</span><span>10</span></div></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Seuil de similarité</label><input type="range" min="0" max="100" defaultValue="75" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>0%</span><span>75%</span><span>100%</span></div></div>
+                                    <div className="flex items-center gap-3"><input type="checkbox" id="citations" defaultChecked className="w-4 h-4 text-bgfi-primary rounded" /><label htmlFor="citations" className="text-sm text-gray-700">Inclure les citations des sources</label></div>
+                                    <div className="flex items-center gap-3"><input type="checkbox" id="fallback" defaultChecked className="w-4 h-4 text-bgfi-primary rounded" /><label htmlFor="fallback" className="text-sm text-gray-700">Réponse de secours si aucune source trouvée</label></div>
+                                </div>
+                            </Card>
+                            <Card title="Personnalisation du Bot">
+                                <div className="space-y-6">
+                                    <Input label="Nom du Bot" value="Cassiopée" />
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Message d'accueil</label><textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="3" defaultValue="Bonjour ! Je suis Cassiopée, votre assistant BGFI disponible 24/7. Comment puis-je vous aider aujourd'hui ?" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Instructions système (prompt)</label><textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border font-mono text-xs" rows="6" defaultValue={`Tu es Cassiopée, l'assistant virtuel de BGFI Bank.\n\nRÈGLES:\n- Réponds uniquement en français\n- Base-toi UNIQUEMENT sur la documentation fournie\n- Si tu ne trouves pas la réponse, oriente vers le service client\n- Sois professionnel, chaleureux et concis\n- Ne partage JAMAIS d'informations sensibles`} /></div>
+                                    <Button icon={Icons.Sparkles}>Générer avec l'IA</Button>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Contacts View
+        const ContactsView = () => {
+            const [showImportModal, setShowImportModal] = useState(false);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <Input placeholder="Rechercher un contact..." icon={Icons.Search} className="w-64" />
+                            <Select options={[{ value: '', label: 'Tous les segments' }, { value: 'inactif', label: 'Inactifs' }, { value: 'actif', label: 'Actifs' }, { value: 'nouveau', label: 'Nouveaux' }]} />
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="secondary" onClick={() => setShowImportModal(true)} icon={Icons.Upload}>Importer</Button>
+                            <Button icon={Icons.Plus}>Ajouter</Button>
+                        </div>
+                    </div>
+
+                    <Card>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Contact</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Téléphone</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Email</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Segment</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Dernière activité</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Statut</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {mockContacts.map(contact => (
+                                        <tr key={contact.id} className="hover:bg-gray-50">
+                                            <td className="py-4 px-4"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-bgfi-primary/10 rounded-full flex items-center justify-center text-bgfi-primary font-semibold">{contact.name.split(' ').map(n => n[0]).join('')}</div><span className="font-medium text-gray-900">{contact.name}</span></div></td>
+                                            <td className="py-4 px-4 text-sm text-gray-600">{contact.phone}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-600">{contact.email}</td>
+                                            <td className="py-4 px-4"><Badge variant={contact.segment === 'actif' ? 'success' : contact.segment === 'nouveau' ? 'info' : 'warning'}>{contact.segment}</Badge></td>
+                                            <td className="py-4 px-4 text-sm text-gray-600">{contact.lastActivity}</td>
+                                            <td className="py-4 px-4"><Badge variant={contact.status === 'active' ? 'success' : 'danger'}>{contact.status === 'active' ? 'Actif' : 'Désabonné'}</Badge></td>
+                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="sm" icon={Icons.Edit} /><Button variant="ghost" size="sm" icon={Icons.Trash2} /></div></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+
+                    {showImportModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-lg w-full">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <h2 className="text-xl font-semibold text-gray-900">Importer des Contacts</h2>
+                                    <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-bgfi-primary hover:bg-blue-50 transition-colors cursor-pointer">
+                                        <div className="w-16 h-16 bg-bgfi-primary/10 rounded-full flex items-center justify-center text-bgfi-primary mx-auto mb-4"><Icons.Upload /></div>
+                                        <p className="font-medium text-gray-900">Déposez votre fichier ici</p>
+                                        <p className="text-sm text-gray-500 mt-1">CSV, Excel ou JSON (max 10MB)</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-4 rounded-xl">
+                                        <p className="text-sm font-medium text-gray-700 mb-2">Format attendu :</p>
+                                        <code className="text-xs text-gray-600 block">nom, telephone, email, segment</code>
+                                    </div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setShowImportModal(false)}>Annuler</Button>
+                                    <Button icon={Icons.Upload}>Importer</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Templates View
+        const TemplatesView = () => {
+            const [showCreateModal, setShowCreateModal] = useState(false);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <Input placeholder="Rechercher un template..." icon={Icons.Search} className="w-64" />
+                            <Select options={[{ value: '', label: 'Toutes les catégories' }, { value: 'marketing', label: 'Marketing' }, { value: 'utility', label: 'Utilitaire' }, { value: 'authentication', label: 'Authentification' }]} />
+                        </div>
+                        <Button onClick={() => setShowCreateModal(true)} icon={Icons.Plus}>Nouveau Template</Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {mockTemplates.map(template => (
+                            <Card key={template.id}>
+                                <div className="flex items-start justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${template.category === 'marketing' ? 'bg-purple-100 text-purple-600' : template.category === 'utility' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}><Icons.FileText /></div>
+                                        <div><p className="font-medium text-gray-900">{template.name}</p><p className="text-sm text-gray-500 capitalize">{template.category}</p></div>
+                                    </div>
+                                    <Badge variant={template.status === 'approved' ? 'success' : 'warning'}>{template.status === 'approved' ? 'Approuvé' : 'En attente'}</Badge>
+                                </div>
+                                <div className="bg-gray-50 p-4 rounded-xl mb-4"><p className="text-sm text-gray-700 whitespace-pre-line">{template.content}</p></div>
+                                <div className="flex gap-2">
+                                    <Button variant="secondary" size="sm" icon={Icons.Edit} className="flex-1">Modifier</Button>
+                                    <Button variant="ghost" size="sm" icon={Icons.Trash2} />
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+
+                    {showCreateModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <h2 className="text-xl font-semibold text-gray-900">Nouveau Template WhatsApp</h2>
+                                    <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Nom du template" placeholder="Ex: Relance_Connexion" />
+                                        <Select label="Catégorie" options={[{ value: '', label: 'Sélectionner...' }, { value: 'marketing', label: 'Marketing' }, { value: 'utility', label: 'Utilitaire' }, { value: 'authentication', label: 'Authentification' }]} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message</label>
+                                        <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" placeholder="Bonjour {{1}} ! ..." />
+                                        <p className="text-xs text-gray-500 mt-2">Utilisez {'{{1}}'}, {'{{2}}'}, etc. pour les variables.</p>
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Note :</strong> Les templates doivent être approuvés par Meta avant utilisation. Le délai est généralement de 24-48h.</p></div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Annuler</Button>
+                                    <Button onClick={() => setShowCreateModal(false)} icon={Icons.CheckCircle}>Soumettre pour approbation</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Analytics View
+        const AnalyticsView = () => {
+            useEffect(() => {
+                const ctx1 = document.getElementById('performanceChart');
+                const ctx2 = document.getElementById('channelsChart');
+                if (ctx1) { new Chart(ctx1, { type: 'bar', data: { labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'], datasets: [{ label: 'Envoyés', data: [15000, 22000, 18000, 25000, 28000, 32000], backgroundColor: '#1e3a5f' }, { label: 'Délivrés', data: [14500, 21300, 17400, 24200, 27100, 31000], backgroundColor: '#00a86b' }, { label: 'Lus', data: [11000, 16500, 13500, 18900, 21000, 24000], backgroundColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: false } }); }
+                if (ctx2) { new Chart(ctx2, { type: 'pie', data: { labels: ['WhatsApp', 'Email', 'SMS'], datasets: [{ data: [65, 25, 10], backgroundColor: ['#00a86b', '#3b82f6', '#f59e0b'] }] }, options: { responsive: true, maintainAspectRatio: false } }); }
+            }, []);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Button variant="secondary" size="sm">7 jours</Button>
+                            <Button variant="ghost" size="sm">30 jours</Button>
+                            <Button variant="ghost" size="sm">90 jours</Button>
+                            <Button variant="ghost" size="sm" icon={Icons.Calendar}>Personnalisé</Button>
+                        </div>
+                        <Button variant="secondary" size="sm" icon={Icons.Download}>Exporter le rapport</Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard title="Total Messages" value="164.2K" change="23" icon={Icons.MessageSquare} color="blue" />
+                        <StatCard title="Taux de Délivrance" value="96.8%" change="1.2" icon={Icons.CheckCircle} color="green" />
+                        <StatCard title="Taux d'Ouverture" value="78.2%" change="5.2" icon={Icons.Eye} color="purple" />
+                        <StatCard title="Taux de Conversion" value="12.4%" change="2.8" icon={Icons.TrendingUp} color="amber" />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card className="lg:col-span-2" title="Performance des Campagnes"><div className="h-72"><canvas id="performanceChart" /></div></Card>
+                        <Card title="Répartition par Canal">
+                            <div className="h-48"><canvas id="channelsChart" /></div>
+                            <div className="mt-4 space-y-2">
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">WhatsApp</span><span className="font-medium text-emerald-600">65%</span></div>
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">Email</span><span className="font-medium text-blue-600">25%</span></div>
+                                <div className="flex justify-between text-sm"><span className="text-gray-600">SMS</span><span className="font-medium text-amber-600">10%</span></div>
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
+        // Settings View
+        const SettingsView = () => (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card title="Informations Générales">
+                        <div className="space-y-4">
+                            <Input label="Nom de l'organisation" value="BGFI Bank" />
+                            <Input label="Email de contact" value="marketing@bgfi.ga" />
+                            <Input label="Téléphone" value="+241 01 74 12 34" />
+                            <div><label className="block text-sm font-medium text-gray-700 mb-2">Adresse</label><textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="3" defaultValue="Boulevard Triomphal, Libreville, Gabon" /></div>
+                        </div>
+                    </Card>
+                    <Card title="Configuration WhatsApp">
+                        <div className="space-y-4">
+                            <Input label="Numéro WhatsApp Business" value="+241 77 12 34 56" />
+                            <Input label="ID Business Account" value="123456789012345" />
+                            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white"><Icons.CheckCircle /></div>
+                                    <div><p className="font-medium text-gray-900">Connecté à Respond.io</p><p className="text-sm text-gray-500">Dernière sync: il y a 5 min</p></div>
+                                </div>
+                                <Button variant="secondary" size="sm">Reconnecter</Button>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+                <div className="flex justify-end gap-3">
+                    <Button variant="secondary">Réinitialiser</Button>
+                    <Button icon={Icons.CheckCircle}>Sauvegarder les modifications</Button>
+                </div>
+            </div>
+        );
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<BGFIWhatsAppSaaS />);
+    </script>
+</body>
+</html>
