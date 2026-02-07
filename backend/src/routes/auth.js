@@ -86,8 +86,7 @@ router.post('/login', authLimiter, async (req, res) => {
     logger.error('Login error: ' + error.message);
     res.status(500).json({
       error: 'Erreur de connexion',
-      message: error.message,
-      hint: !process.env.DATABASE_URL ? 'DATABASE_URL non configuree' : !process.env.JWT_SECRET ? 'JWT_SECRET non configure' : undefined
+      message: 'Une erreur interne est survenue'
     });
   }
 });
