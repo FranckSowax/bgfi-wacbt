@@ -68,39 +68,46 @@ app.post('/api/test/respondio', async (req, res) => {
   if (!apiKey) return res.status(500).json({ error: 'RESPOND_IO_API_KEY non configure' });
   if (!channelId) return res.status(500).json({ error: 'RESPOND_IO_CHANNEL_ID non configure' });
 
-  const client = axios.create({
-    baseURL: 'https://api.respond.io/v1',
-    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-    timeout: 15000
-  });
-
-  const results = { apiKey: 'set', channelId: channelId };
-
-  // Step 1: Test API connectivity
-  try {
-    const contactsRes = await client.get('/contacts?limit=1');
-    results.apiConnected = true;
-    results.contactsSample = contactsRes.data;
-  } catch (err) {
-    results.apiConnected = false;
-    results.apiError = err.response ? { status: err.response.status, data: err.response.data } : err.message;
-  }
-
-  // Step 2: Send test message if phone provided
+  const results = { channelId };
   const { phone, message } = req.body || {};
-  if (phone) {
+
+  // Try multiple API base URLs and endpoints
+  const apis = [
+    { name: 'v1', baseURL: 'https://api.respond.io/v1', sendPath: '/messages' },
+    { name: 'v2', baseURL: 'https://api.respond.io/v2', sendPath: '/message/send' },
+    { name: 'app-v1', baseURL: 'https://app.respond.io/api/v1', sendPath: '/message/sendContent' },
+  ];
+
+  for (const apiDef of apis) {
+    const client = axios.create({
+      baseURL: apiDef.baseURL,
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      timeout: 10000
+    });
+
+    // Test connectivity with simple GET
     try {
-      const payload = {
-        channelId: channelId,
-        recipient: { type: 'whatsapp', id: phone },
-        message: { type: 'text', text: message || 'Test BGFI WhatsApp SaaS - Connexion OK!' }
-      };
-      const sendRes = await client.post('/messages', payload);
-      results.messageSent = true;
-      results.sendResponse = sendRes.data;
+      const r = await client.get('/');
+      results[apiDef.name + '_root'] = { status: r.status, data: typeof r.data === 'string' ? r.data.substring(0, 200) : r.data };
     } catch (err) {
-      results.messageSent = false;
-      results.sendError = err.response ? { status: err.response.status, data: err.response.data } : err.message;
+      results[apiDef.name + '_root'] = err.response ? { status: err.response.status, msg: err.response.data?.message || JSON.stringify(err.response.data).substring(0, 200) } : err.message;
+    }
+
+    // Try send if phone provided
+    if (phone) {
+      const payloads = [
+        { name: 'format1', data: { channelId: parseInt(channelId), contactId: phone, message: { type: 'text', text: message || 'Test BGFI WhatsApp - Connexion OK!' } } },
+        { name: 'format2', data: { channelId: parseInt(channelId), recipient: { type: 'whatsapp', id: phone }, message: { type: 'text', text: message || 'Test BGFI WhatsApp - Connexion OK!' } } },
+      ];
+
+      for (const payload of payloads) {
+        try {
+          const r = await client.post(apiDef.sendPath, payload.data);
+          results[apiDef.name + '_send_' + payload.name] = { success: true, data: r.data };
+        } catch (err) {
+          results[apiDef.name + '_send_' + payload.name] = err.response ? { status: err.response.status, data: err.response.data } : err.message;
+        }
+      }
     }
   }
 
