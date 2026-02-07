@@ -66,21 +66,12 @@ class CampaignService {
   }
 
   /**
-   * Envoyer un batch de messages
+   * Envoyer un batch de messages (texte simple via Respond.io v2)
    */
   async sendBatch(batch, template, variables) {
     const messages = batch.map(contact => ({
       phone: contact.phone,
-      message: this.formatMessage(template.content, contact, variables),
-      type: 'template',
-      template: {
-        name: template.name,
-        language: 'fr',
-        components: [{
-          type: 'body',
-          parameters: this.extractVariables(template.content, contact, variables)
-        }]
-      }
+      message: this.formatMessage(template.content, contact, variables)
     }));
 
     const results = await respondIOService.sendBatch(messages, {
@@ -194,11 +185,56 @@ class CampaignService {
   async processDirectSend(campaign, batches) {
     for (const batch of batches) {
       try {
-        const results = await this.sendBatch(batch, campaign.template, campaign.variables);
-        await this.updateCampaignStats(campaign.id, results);
+        // Send each message individually to track per-contact results
+        for (const contact of batch) {
+          const text = this.formatMessage(campaign.template.content, contact, campaign.variables);
+          const result = await respondIOService.sendMessage(contact.phone, text);
+
+          const newStatus = result.success ? 'SENT' : 'FAILED';
+          await prisma.message.updateMany({
+            where: { campaignId: campaign.id, contactId: contact.id },
+            data: {
+              status: newStatus,
+              externalId: result.messageId ? String(result.messageId) : null,
+              sentAt: result.success ? new Date() : null,
+              error: result.error || null
+            }
+          });
+        }
+
+        // Update aggregate campaign stats
+        const msgStats = await prisma.message.groupBy({
+          by: ['status'],
+          where: { campaignId: campaign.id },
+          _count: { status: true }
+        });
+        const sent = msgStats.find(s => s.status === 'SENT')?._count.status || 0;
+        const failed = msgStats.find(s => s.status === 'FAILED')?._count.status || 0;
+        const delivered = sent;
+
+        await prisma.campaign.update({
+          where: { id: campaign.id },
+          data: { sent: sent + failed, delivered, failed }
+        });
+
+        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'sent' }, sent);
+        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'failed' }, failed);
       } catch (error) {
         logger.error('Erreur batch direct', { campaignId: campaign.id, error: error.message });
       }
+    }
+
+    // Mark campaign as completed
+    const total = await prisma.message.count({ where: { campaignId: campaign.id } });
+    const processed = await prisma.message.count({
+      where: { campaignId: campaign.id, status: { in: ['SENT', 'DELIVERED', 'READ', 'FAILED'] } }
+    });
+    if (processed >= total) {
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: 'COMPLETED', completedAt: new Date() }
+      });
+      activeCampaigns.dec();
     }
   }
 
