@@ -123,24 +123,31 @@ app.post('/api/test/respondio', async (req, res) => {
     } catch (e) { results['get_' + ep.split('/').pop()] = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
   }
 
-  // Try sending with the numeric contact ID
-  const cId = contactNumericId || phone;
-  results.resolvedContactId = cId;
-  const msgEndpoints = [
-    { name: 'v2_contact_id_send', path: '/v2/contact/' + cId + '/send_message', data: { channelId: chId, message: { type: 'text', text } } },
-    { name: 'v2_contact_id_msg', path: '/v2/contact/' + cId + '/message', data: { channelId: chId, message: { type: 'text', text } } },
-    { name: 'v2_msg_send_cid', path: '/v2/message/send', data: { contactId: cId, channelId: chId, message: { type: 'text', text } } },
-    { name: 'v2_msg_sendContent_cid', path: '/v2/message/sendContent/' + cId, data: { body: [{ type: 'text', text }] } },
-    { name: 'v2_msg_send_text', path: '/v2/message/send', data: { contactId: cId, channelId: chId, text } },
-    { name: 'v2_contact_send_text', path: '/v2/contact/id:' + cId + '/message', data: { channelId: chId, type: 'text', text } },
-    { name: 'v2_contact_phone_msg', path: '/v2/contact/phone:' + encodeURIComponent(phone) + '/message', data: { channelId: chId, type: 'text', text } },
+  // The endpoint POST /v2/contact/phone:{phone}/message EXISTS (returns 400 not 404)
+  // Try different body formats
+  const basePath = '/v2/contact/phone:' + encodeURIComponent(phone) + '/message';
+  const bodyFormats = [
+    { name: 'msg_obj', data: { message: { type: 'text', text } } },
+    { name: 'msg_obj_ch', data: { message: { type: 'text', text }, channelId: chId } },
+    { name: 'msg_str', data: { message: text } },
+    { name: 'msg_str_ch', data: { message: text, channelId: chId } },
+    { name: 'text_only', data: { text } },
+    { name: 'text_ch', data: { text, channelId: chId } },
+    { name: 'body_arr', data: { body: [{ type: 'text', text }] } },
+    { name: 'body_arr_ch', data: { body: [{ type: 'text', text }], channelId: chId } },
+    { name: 'type_text', data: { type: 'text', text, channelId: chId } },
+    { name: 'content', data: { content: { type: 'text', text }, channelId: chId } },
+    { name: 'msg_ch_str', data: { message: { type: 'text', text }, channelId: String(chId) } },
   ];
-  for (const ep of msgEndpoints) {
+  for (const fmt of bodyFormats) {
     try {
-      const r = await axios.post('https://api.respond.io' + ep.path, ep.data, { headers, timeout });
-      results[ep.name] = { ok: true, data: r.data };
+      const r = await axios.post('https://api.respond.io' + basePath, fmt.data, { headers, timeout });
+      results[fmt.name] = { ok: true, data: r.data };
       return res.json(results);
-    } catch (e) { results[ep.name] = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
+    } catch (e) {
+      const errMsg = e.response ? e.response.data?.message || JSON.stringify(e.response.data) : e.message;
+      results[fmt.name] = { s: e.response?.status, m: errMsg };
+    }
   }
 
   res.json(results);
