@@ -1,32 +1,31 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 
-const RESPOND_IO_BASE_URL = 'https://api.respond.io/v1';
+const RESPOND_IO_BASE_URL = 'https://api.respond.io/v2';
 
 class RespondIOService {
   constructor() {
     this.apiKey = process.env.RESPOND_IO_API_KEY;
+    this.channelId = parseInt(process.env.RESPOND_IO_CHANNEL_ID) || 0;
     this.client = axios.create({
       baseURL: RESPOND_IO_BASE_URL,
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       timeout: 30000
     });
   }
 
   /**
-   * Envoyer un message WhatsApp
+   * Envoyer un message WhatsApp via API v2
+   * Endpoint: POST /v2/contact/phone:{phone}/message
    */
   async sendMessage(phone, message, options = {}) {
     try {
       const payload = {
-        channelId: options.channelId || process.env.RESPOND_IO_CHANNEL_ID,
-        recipient: {
-          type: 'whatsapp',
-          id: phone
-        },
+        channelId: options.channelId || this.channelId,
         message: {
           type: options.type || 'text',
           text: message
@@ -44,22 +43,22 @@ class RespondIOService {
         };
       }
 
-      const response = await this.client.post('/messages', payload);
-      
-      logger.info(`Message envoyé à ${phone}`, {
-        messageId: response.data.id,
-        phone: phone.replace(/\d(?=\d{4})/g, '*')
+      const identifier = 'phone:' + encodeURIComponent(phone);
+      const response = await this.client.post(`/contact/${identifier}/message`, payload);
+
+      logger.info(`Message envoyé à ${phone.replace(/\d(?=\d{4})/g, '*')}`, {
+        messageId: response.data.messageId,
+        contactId: response.data.contactId
       });
 
       return {
         success: true,
-        messageId: response.data.id,
-        status: response.data.status
+        messageId: response.data.messageId,
+        contactId: response.data.contactId
       };
     } catch (error) {
-      logger.error(`Erreur envoi message à ${phone}`, {
-        error: error.message,
-        phone: phone.replace(/\d(?=\d{4})/g, '*')
+      logger.error(`Erreur envoi message à ${phone.replace(/\d(?=\d{4})/g, '*')}`, {
+        error: error.response?.data?.message || error.message
       });
 
       return {
@@ -79,13 +78,12 @@ class RespondIOService {
       errors: []
     };
 
-    // Rate limiting: 80 messages/second
     const batchSize = options.batchSize || 80;
     const delay = options.delay || 1000;
 
     for (let i = 0; i < messages.length; i += batchSize) {
       const batch = messages.slice(i, i + batchSize);
-      
+
       const batchPromises = batch.map(async (msg) => {
         const result = await this.sendMessage(msg.phone, msg.message, {
           type: msg.type,
@@ -107,7 +105,6 @@ class RespondIOService {
 
       await Promise.all(batchPromises);
 
-      // Délai entre les batches
       if (i + batchSize < messages.length) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -117,11 +114,37 @@ class RespondIOService {
   }
 
   /**
+   * Récupérer un contact par téléphone
+   */
+  async getContact(phone) {
+    try {
+      const identifier = 'phone:' + encodeURIComponent(phone);
+      const response = await this.client.get(`/contact/${identifier}`);
+      return { success: true, contact: response.data };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.message || error.message };
+    }
+  }
+
+  /**
+   * Créer ou mettre à jour un contact
+   */
+  async createOrUpdateContact(phone, data = {}) {
+    try {
+      const identifier = 'phone:' + encodeURIComponent(phone);
+      const response = await this.client.post(`/contact/create_or_update/${identifier}`, data);
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.message || error.message };
+    }
+  }
+
+  /**
    * Récupérer les statuts des messages
    */
   async getMessageStatus(messageId) {
     try {
-      const response = await this.client.get(`/messages/${messageId}`);
+      const response = await this.client.get(`/message/${messageId}`);
       return {
         success: true,
         status: response.data.status,
@@ -132,97 +155,7 @@ class RespondIOService {
       logger.error(`Erreur récupération statut message ${messageId}`, {
         error: error.message
       });
-
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Vérifier le numéro WhatsApp
-   */
-  async checkPhoneNumber(phone) {
-    try {
-      const response = await this.client.post('/contacts/validate', {
-        phone
-      });
-
-      return {
-        valid: response.data.valid,
-        whatsappId: response.data.whatsappId,
-        exists: response.data.exists
-      };
-    } catch (error) {
-      logger.error(`Erreur validation numéro ${phone}`, {
-        error: error.message
-      });
-
-      return {
-        valid: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Créer un template
-   */
-  async createTemplate(template) {
-    try {
-      const response = await this.client.post('/templates', {
-        name: template.name,
-        category: template.category,
-        language: template.language || 'fr',
-        components: [
-          {
-            type: 'BODY',
-            text: template.content
-          }
-        ]
-      });
-
-      logger.info(`Template créé: ${template.name}`, {
-        templateId: response.data.id
-      });
-
-      return {
-        success: true,
-        templateId: response.data.id,
-        status: response.data.status
-      };
-    } catch (error) {
-      logger.error(`Erreur création template ${template.name}`, {
-        error: error.message
-      });
-
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message
-      };
-    }
-  }
-
-  /**
-   * Récupérer les templates
-   */
-  async getTemplates() {
-    try {
-      const response = await this.client.get('/templates');
-      return {
-        success: true,
-        templates: response.data.templates
-      };
-    } catch (error) {
-      logger.error('Erreur récupération templates', {
-        error: error.message
-      });
-
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   }
 
