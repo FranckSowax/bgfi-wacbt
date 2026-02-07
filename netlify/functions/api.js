@@ -99,16 +99,33 @@ app.post('/api/test/respondio', async (req, res) => {
     return res.json(results);
   } catch (e) { results.v2_send = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
 
-  // Format 4: v2 /contact/create_or_update + message
+  // Format 4: v2 create contact then get ID then send
   try {
-    const r = await axios.post('https://api.respond.io/v2/contact/create_or_update/phone:' + encodeURIComponent(phone), { firstName: 'Test' }, { headers, timeout });
-    results.v2_contact = { ok: true, data: r.data };
-    if (r.data && r.data.id) {
-      const r2 = await axios.post('https://api.respond.io/v2/message/send', { contactId: r.data.id, message: { type: 'text', text } }, { headers, timeout });
-      results.v2_msg = { ok: true, data: r2.data };
+    await axios.post('https://api.respond.io/v2/contact/create_or_update/phone:' + encodeURIComponent(phone), { firstName: 'Test BGFI' }, { headers, timeout });
+    // Get contact ID by phone
+    const getR = await axios.get('https://api.respond.io/v2/contact/by_custom_field/phone/' + encodeURIComponent(phone), { headers, timeout });
+    results.v2_getContact = { ok: true, data: getR.data };
+    const contactId = getR.data?.id || getR.data?.contact?.id || getR.data?.data?.id;
+    if (contactId) {
+      const r2 = await axios.post('https://api.respond.io/v2/message/sendContent/' + contactId, { body: [{ type: 'text', text }] }, { headers, timeout });
+      results.v2_sendContent = { ok: true, data: r2.data };
       return res.json(results);
     }
-  } catch (e) { results.v2_contact = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
+  } catch (e) { results.v2_flow = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
+
+  // Format 5: try sendContent with phone as contactId
+  try {
+    const r = await axios.post('https://api.respond.io/v2/message/sendContent/' + encodeURIComponent(phone), { body: [{ type: 'text', text }] }, { headers, timeout });
+    results.v2_sendContent_phone = { ok: true, data: r.data };
+    return res.json(results);
+  } catch (e) { results.v2_sendContent_phone = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
+
+  // Format 6: v2 /message/send with channelId + phone as string contactId
+  try {
+    const r = await axios.post('https://api.respond.io/v2/message/sendContent', { channelId: chId, contactId: phone, body: [{ type: 'text', text }] }, { headers, timeout });
+    results.v2_sendContent_body = { ok: true, data: r.data };
+    return res.json(results);
+  } catch (e) { results.v2_sendContent_body = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
 
   res.json(results);
 });
