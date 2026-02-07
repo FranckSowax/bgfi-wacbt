@@ -123,18 +123,24 @@ app.post('/api/test/respondio', async (req, res) => {
     } catch (e) { results['get_' + ep.split('/').pop()] = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
   }
 
-  // Try sending with different message endpoint variants
+  // Try sending with the numeric contact ID
+  const cId = contactNumericId || phone;
+  results.resolvedContactId = cId;
   const msgEndpoints = [
-    { path: '/v2/message/send_message', data: { channelId: chId, contactId: contactNumericId || phone, message: { type: 'text', text } } },
-    { path: '/v2/message/send_message', data: { channelId: chId, contactId: phone, message: { type: 'text', text } } },
-    { path: '/v2/contact/' + encodeURIComponent(contactNumericId || phone) + '/message', data: { channelId: chId, type: 'text', text } },
+    { name: 'v2_contact_id_send', path: '/v2/contact/' + cId + '/send_message', data: { channelId: chId, message: { type: 'text', text } } },
+    { name: 'v2_contact_id_msg', path: '/v2/contact/' + cId + '/message', data: { channelId: chId, message: { type: 'text', text } } },
+    { name: 'v2_msg_send_cid', path: '/v2/message/send', data: { contactId: cId, channelId: chId, message: { type: 'text', text } } },
+    { name: 'v2_msg_sendContent_cid', path: '/v2/message/sendContent/' + cId, data: { body: [{ type: 'text', text }] } },
+    { name: 'v2_msg_send_text', path: '/v2/message/send', data: { contactId: cId, channelId: chId, text } },
+    { name: 'v2_contact_send_text', path: '/v2/contact/id:' + cId + '/message', data: { channelId: chId, type: 'text', text } },
+    { name: 'v2_contact_phone_msg', path: '/v2/contact/phone:' + encodeURIComponent(phone) + '/message', data: { channelId: chId, type: 'text', text } },
   ];
   for (const ep of msgEndpoints) {
     try {
       const r = await axios.post('https://api.respond.io' + ep.path, ep.data, { headers, timeout });
-      results['msg_' + ep.path.replace(/\//g, '_')] = { ok: true, data: r.data };
+      results[ep.name] = { ok: true, data: r.data };
       return res.json(results);
-    } catch (e) { results['msg_' + ep.path.split('/').pop()] = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
+    } catch (e) { results[ep.name] = e.response ? { s: e.response.status, d: e.response.data } : e.message; }
   }
 
   res.json(results);
