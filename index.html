@@ -413,6 +413,7 @@
         // =============================================
         const CampaignsView = () => {
             const [showCreateModal, setShowCreateModal] = useState(false);
+            const [selectedCampaign, setSelectedCampaign] = useState(null);
             const { data, loading, error, refetch } = useApi('/campaigns?limit=50');
             const { data: tplData } = useApi('/templates?status=APPROVED&limit=100');
             const [form, setForm] = useState({ name: '', type: '', templateId: '', segment: '', scheduledAt: '' });
@@ -459,7 +460,7 @@
                                             <td className="py-4 px-4 text-sm text-gray-600">{catMap[c.type] || c.type}</td>
                                             <td className="py-4 px-4 text-sm text-gray-600">{segmentMap[c.segment] || c.segment || '-'}</td>
                                             <td className="py-4 px-4 text-sm text-gray-500">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('fr-FR') : '-'}</td>
-                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2">{c.status === 'DRAFT' && <Button variant="accent" size="sm" icon={Icons.Play} onClick={() => handleSend(c.id)}>Lancer</Button>}<Button variant="ghost" size="sm" icon={Icons.Eye} /></div></td>
+                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2">{c.status === 'DRAFT' && <Button variant="accent" size="sm" icon={Icons.Play} onClick={() => handleSend(c.id)}>Lancer</Button>}<Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => setSelectedCampaign(c)} /></div></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -492,6 +493,78 @@
                             </div>
                         </div>
                     )}
+
+                    {selectedCampaign && (() => {
+                        const c = selectedCampaign;
+                        const totalSent = c.sent || 0;
+                        const deliveryRate = totalSent > 0 ? ((c.delivered / totalSent) * 100).toFixed(1) : 0;
+                        const openRate = c.delivered > 0 ? ((c.read / c.delivered) * 100).toFixed(1) : 0;
+                        const clickRate = c.read > 0 ? ((c.clicked / c.read) * 100).toFixed(1) : 0;
+                        return (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto animate-fade-in">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-bgfi-primary/10 rounded-xl flex items-center justify-center text-bgfi-primary"><Icons.Send /></div>
+                                        <div>
+                                            <h2 className="text-xl font-semibold text-gray-900">{c.name}</h2>
+                                            <p className="text-sm text-gray-500">{catMap[c.type] || c.type} - {segmentMap[c.segment] || c.segment || 'Tous'}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSelectedCampaign(null)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant={statusVariant[c.status] || 'default'}>{statusMap[c.status] || c.status}</Badge>
+                                        {c.scheduledAt && <span className="text-sm text-gray-500 flex items-center gap-1"><Icons.Calendar /> Planifiee le {new Date(c.scheduledAt).toLocaleString('fr-FR')}</span>}
+                                    </div>
+
+                                    {c.description && <p className="text-sm text-gray-600">{c.description}</p>}
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div className="bg-blue-50 rounded-xl p-4 text-center">
+                                            <p className="text-2xl font-bold text-blue-700">{formatNum(totalSent)}</p>
+                                            <p className="text-xs text-blue-600 mt-1">Envoyes</p>
+                                        </div>
+                                        <div className="bg-green-50 rounded-xl p-4 text-center">
+                                            <p className="text-2xl font-bold text-green-700">{formatNum(c.delivered || 0)}</p>
+                                            <p className="text-xs text-green-600 mt-1">Delivres ({deliveryRate}%)</p>
+                                        </div>
+                                        <div className="bg-purple-50 rounded-xl p-4 text-center">
+                                            <p className="text-2xl font-bold text-purple-700">{formatNum(c.read || 0)}</p>
+                                            <p className="text-xs text-purple-600 mt-1">Lus ({openRate}%)</p>
+                                        </div>
+                                        <div className="bg-amber-50 rounded-xl p-4 text-center">
+                                            <p className="text-2xl font-bold text-amber-700">{formatNum(c.clicked || 0)}</p>
+                                            <p className="text-xs text-amber-600 mt-1">Cliques ({clickRate}%)</p>
+                                        </div>
+                                    </div>
+
+                                    {(c.failed || 0) > 0 && (
+                                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-sm text-red-700">
+                                            <span className="font-medium">{formatNum(c.failed)}</span> messages echoues
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between"><span className="text-gray-500">Template</span><span className="font-medium text-gray-900">{c.template?.displayName || c.template?.name || '-'}</span></div>
+                                            <div className="flex justify-between"><span className="text-gray-500">Segment</span><span className="font-medium text-gray-900">{segmentMap[c.segment] || c.segment || 'Tous'}</span></div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between"><span className="text-gray-500">Creee le</span><span className="font-medium text-gray-900">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('fr-FR') : '-'}</span></div>
+                                            <div className="flex justify-between"><span className="text-gray-500">Terminee le</span><span className="font-medium text-gray-900">{c.completedAt ? new Date(c.completedAt).toLocaleDateString('fr-FR') : '-'}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    {c.status === 'DRAFT' && <Button variant="accent" icon={Icons.Play} onClick={() => { handleSend(c.id); setSelectedCampaign(null); }}>Lancer la campagne</Button>}
+                                    <Button variant="secondary" onClick={() => setSelectedCampaign(null)}>Fermer</Button>
+                                </div>
+                            </div>
+                        </div>
+                        );
+                    })()}
                 </div>
             );
         };
