@@ -59,6 +59,58 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Debug endpoint - temporary for Respond.io testing
+app.get('/api/debug/message-status/:messageId', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const resp = await axios.get(`https://api.respond.io/v2/message/${req.params.messageId}`, {
+      headers: { 'Authorization': `Bearer ${process.env.RESPOND_IO_API_KEY}` },
+      timeout: 10000
+    });
+    res.json({ success: true, data: resp.data });
+  } catch (error) {
+    res.json({ success: false, status: error.response?.status, data: error.response?.data, error: error.message });
+  }
+});
+
+app.post('/api/debug/send-whatsapp', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const { phone, message, useTemplate, templateName } = req.body;
+    const chId = parseInt(process.env.RESPOND_IO_CHANNEL_ID) || 0;
+    const identifier = 'phone:' + encodeURIComponent(phone);
+
+    let payload;
+    if (useTemplate && templateName) {
+      // Try sending as WhatsApp template (for outside 24h window)
+      payload = {
+        channelId: chId,
+        message: {
+          type: 'whatsapp_template',
+          template: {
+            name: templateName,
+            languageCode: 'fr',
+            components: []
+          }
+        }
+      };
+    } else {
+      payload = { channelId: chId, message: { type: 'text', text: message } };
+    }
+
+    const resp = await axios.post(`https://api.respond.io/v2/contact/${identifier}/message`, payload, {
+      headers: {
+        'Authorization': `Bearer ${process.env.RESPOND_IO_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    });
+    res.json({ success: true, payload, response: resp.data });
+  } catch (error) {
+    res.json({ success: false, payload: req.body, status: error.response?.status, data: error.response?.data, error: error.message });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
