@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const respondIOService = require('./respondio');
+const whatsappService = require('./whatsapp');
 const logger = require('../utils/logger');
 const { campaignMessagesSent, campaignDuration, activeCampaigns } = require('../utils/metrics');
 
@@ -66,7 +66,7 @@ class CampaignService {
   }
 
   /**
-   * Envoyer un batch de messages (texte simple via Respond.io v2)
+   * Envoyer un batch de messages via WhatsApp Cloud API
    */
   async sendBatch(batch, template, variables) {
     const messages = batch.map(contact => ({
@@ -74,7 +74,7 @@ class CampaignService {
       message: this.formatMessage(template.content, contact, variables)
     }));
 
-    const results = await respondIOService.sendBatch(messages, {
+    const results = await whatsappService.sendBatch(messages, {
       batchSize: parseInt(process.env.CAMPAIGN_RATE_LIMIT) || 80,
       delay: 1000
     });
@@ -188,7 +188,7 @@ class CampaignService {
         // Send each message individually to track per-contact results
         for (const contact of batch) {
           const text = this.formatMessage(campaign.template.content, contact, campaign.variables);
-          const result = await respondIOService.sendMessage(contact.phone, text);
+          const result = await whatsappService.sendMessage(contact.phone, text);
 
           const newStatus = result.success ? 'SENT' : 'FAILED';
           await prisma.message.updateMany({

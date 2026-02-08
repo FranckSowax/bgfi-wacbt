@@ -3,7 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 
 const { authenticate, authorize } = require('../middleware/auth');
-const respondIOService = require('../services/respondio');
+const whatsappService = require('../services/whatsapp');
 const logger = require('../utils/logger');
 const { templatesTotal } = require('../utils/metrics');
 
@@ -120,20 +120,19 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
       }
     });
 
-    // Soumettre à Respond.io/Meta pour approbation
-    const respondIOResult = await respondIOService.createTemplate({
+    // Soumettre à Meta pour approbation via WhatsApp Cloud API
+    const metaResult = await whatsappService.createTemplate({
       name: template.name,
       category: template.category.toLowerCase(),
       content,
       language
     });
 
-    if (respondIOResult.success) {
-      // Mettre à jour avec l'ID Meta
+    if (metaResult.success) {
       await prisma.template.update({
         where: { id: template.id },
         data: {
-          metaId: respondIOResult.templateId
+          metaId: metaResult.templateId
         }
       });
     }
@@ -149,8 +148,8 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
 
     res.status(201).json({
       ...template,
-      message: 'Template créé et soumis pour approbation. Délai: 24-48h.',
-      respondIOStatus: respondIOResult.success ? 'submitted' : 'failed'
+      message: 'Template créé et soumis pour approbation Meta. Délai: 24-48h.',
+      metaStatus: metaResult.success ? 'submitted' : 'failed'
     });
   } catch (error) {
     logger.error('Error creating template', { error: error.message });
@@ -247,7 +246,7 @@ router.delete('/:id', authenticate, authorize(['template:delete']), async (req, 
 });
 
 // ============================================
-// POST /api/templates/:id/sync - Synchroniser avec Respond.io
+// POST /api/templates/:id/sync - Synchroniser avec Meta WhatsApp
 // ============================================
 router.post('/:id/sync', authenticate, authorize(['template:sync']), async (req, res) => {
   try {
@@ -261,8 +260,8 @@ router.post('/:id/sync', authenticate, authorize(['template:sync']), async (req,
       return res.status(404).json({ error: 'Template non trouvé' });
     }
 
-    // Récupérer le statut depuis Respond.io
-    const templatesResult = await respondIOService.getTemplates();
+    // Récupérer le statut depuis Meta WhatsApp Cloud API
+    const templatesResult = await whatsappService.getTemplates();
     
     if (!templatesResult.success) {
       return res.status(500).json({
@@ -296,7 +295,7 @@ router.post('/:id/sync', authenticate, authorize(['template:sync']), async (req,
     } else {
       res.status(404).json({
         error: 'Template non trouvé',
-        message: 'Ce template n\'existe pas sur Respond.io'
+        message: 'Ce template n\'existe pas sur Meta WhatsApp'
       });
     }
   } catch (error) {

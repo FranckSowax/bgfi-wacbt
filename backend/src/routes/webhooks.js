@@ -2,96 +2,103 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 
-const respondIOService = require('../services/respondio');
+const whatsappService = require('../services/whatsapp');
 const logger = require('../utils/logger');
 
 const prisma = new PrismaClient();
 
 // ============================================
-// POST /webhooks/respondio/incoming
-// Webhook pour les messages entrants de Respond.io
+// GET /webhooks/whatsapp - Vérification webhook Meta
+// Meta envoie un GET avec hub.mode, hub.verify_token, hub.challenge
 // ============================================
-router.post('/respondio/incoming', async (req, res) => {
+router.get('/whatsapp', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  const result = whatsappService.verifyWebhook(mode, token, challenge);
+
+  if (result.valid) {
+    logger.info('Webhook verified successfully');
+    return res.status(200).send(challenge);
+  }
+
+  logger.warn('Webhook verification failed', { mode, token });
+  return res.sendStatus(403);
+});
+
+// ============================================
+// POST /webhooks/whatsapp - Messages entrants WhatsApp Cloud API
+// Format Meta: { object, entry: [{ changes: [{ value: { messages, statuses, contacts } }] }] }
+// ============================================
+router.post('/whatsapp', async (req, res) => {
   try {
-    const signature = req.headers['x-respondio-signature'];
-    
-    // Vérifier la signature
-    if (!respondIOService.verifyWebhookSignature(req.body, signature)) {
-      logger.warn('Invalid webhook signature');
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-
-    const { event, data } = req.body;
-
-    logger.info('Received webhook from Respond.io', { event, messageId: data?.messageId });
-
-    switch (event) {
-      case 'message.received':
-        await handleIncomingMessage(data);
-        break;
-        
-      case 'message.delivered':
-        await updateMessageStatus(data.messageId, 'DELIVERED', { deliveredAt: new Date() });
-        break;
-        
-      case 'message.read':
-        await updateMessageStatus(data.messageId, 'READ', { readAt: new Date() });
-        break;
-        
-      case 'message.failed':
-        await handleFailedMessage(data);
-        break;
-        
-      case 'contact.created':
-        await handleContactCreated(data);
-        break;
-        
-      case 'contact.updated':
-        await handleContactUpdated(data);
-        break;
-        
-      default:
-        logger.info('Unhandled webhook event', { event });
-    }
-
+    // Toujours répondre 200 immédiatement pour éviter les retries Meta
     res.status(200).json({ received: true });
+
+    const body = req.body;
+
+    if (body.object !== 'whatsapp_business_account') {
+      return;
+    }
+
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value;
+        if (!value) continue;
+
+        // Traiter les messages entrants
+        if (value.messages) {
+          for (const message of value.messages) {
+            await handleIncomingMessage(message, value.contacts);
+          }
+        }
+
+        // Traiter les mises à jour de statut
+        if (value.statuses) {
+          for (const status of value.statuses) {
+            await handleStatusUpdate(status);
+          }
+        }
+      }
+    }
   } catch (error) {
-    logger.error('Error processing webhook', { error: error.message });
-    // Toujours retourner 200 pour éviter les retries infinis
-    res.status(200).json({ received: true, error: error.message });
+    logger.error('Error processing WhatsApp webhook', { error: error.message });
   }
 });
 
 // ============================================
 // Gestionnaire: Message entrant
 // ============================================
-async function handleIncomingMessage(data) {
+async function handleIncomingMessage(message, contacts) {
   try {
-    const { contact, message } = data;
-    
-    logger.info('Incoming message', { 
-      from: contact.phone.replace(/\d(?=\d{4})/g, '*'),
-      type: message.type 
+    const from = message.from; // numéro sans +
+    const phone = '+' + from;
+    const contactInfo = contacts?.find(c => c.wa_id === from);
+    const contactName = contactInfo?.profile?.name;
+
+    logger.info('Incoming WhatsApp message', {
+      from: phone.replace(/\d(?=\d{4})/g, '*'),
+      type: message.type
     });
 
     // Rechercher ou créer le contact
     let dbContact = await prisma.contact.findUnique({
-      where: { phone: contact.phone }
+      where: { phone }
     });
 
     if (!dbContact) {
       dbContact = await prisma.contact.create({
         data: {
-          phone: contact.phone,
-          name: contact.name,
-          whatsappId: contact.id,
+          phone,
+          name: contactName,
+          whatsappId: from,
           optedIn: true,
           optedInAt: new Date()
         }
       });
       logger.info('New contact created from webhook', { contactId: dbContact.id });
     } else {
-      // Mettre à jour la dernière activité
       await prisma.contact.update({
         where: { id: dbContact.id },
         data: { lastActivity: new Date() }
@@ -99,51 +106,42 @@ async function handleIncomingMessage(data) {
     }
 
     // Si c'est un message texte, potentiellement l'envoyer au chatbot RAG
-    if (message.type === 'text') {
-      // Vérifier si le contact a initié une conversation avec le chatbot
+    if (message.type === 'text' && message.text?.body) {
+      const text = message.text.body;
+
       const recentSession = await prisma.chatSession.findFirst({
         where: {
           contactId: dbContact.id,
-          updatedAt: {
-            gte: new Date(Date.now() - 30 * 60 * 1000) // 30 minutes
-          }
+          updatedAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
         },
         orderBy: { updatedAt: 'desc' }
       });
 
-      // Si le message contient des mots-clés du chatbot ou s'il y a une session active
       const chatbotKeywords = ['aide', 'help', 'assistant', 'bot', 'cassiopee', 'question'];
-      const isChatbotRequest = chatbotKeywords.some(kw => 
-        message.text.toLowerCase().includes(kw)
+      const isChatbotRequest = chatbotKeywords.some(kw =>
+        text.toLowerCase().includes(kw)
       );
 
       if (isChatbotRequest || recentSession) {
-        // Appeler le service RAG
         const axios = require('axios');
         const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || 'http://localhost:8000';
-        
+
         try {
           const ragResponse = await axios.post(`${RAG_SERVICE_URL}/chat`, {
-            message: message.text,
+            message: text,
             contact_id: dbContact.id
           });
 
-          // Envoyer la réponse via Respond.io
-          await respondIOService.sendMessage(
-            contact.phone,
-            ragResponse.data.response
-          );
+          await whatsappService.sendMessage(phone, ragResponse.data.response);
 
-          logger.info('Chatbot response sent', { 
+          logger.info('Chatbot response sent', {
             contactId: dbContact.id,
-            confidence: ragResponse.data.confidence 
+            confidence: ragResponse.data.confidence
           });
         } catch (ragError) {
           logger.error('Error getting RAG response', { error: ragError.message });
-          
-          // Message de secours
-          await respondIOService.sendMessage(
-            contact.phone,
+          await whatsappService.sendMessage(
+            phone,
             'Désolé, je ne peux pas traiter votre demande pour le moment. Veuillez contacter le service client au 0770 12 34 56.'
           );
         }
@@ -155,130 +153,61 @@ async function handleIncomingMessage(data) {
 }
 
 // ============================================
-// Gestionnaire: Mise à jour du statut d'un message
+// Gestionnaire: Mise à jour de statut WhatsApp
+// statuses: sent, delivered, read, failed
 // ============================================
-async function updateMessageStatus(externalId, status, additionalData = {}) {
+async function handleStatusUpdate(status) {
   try {
-    const message = await prisma.message.findFirst({
+    const externalId = status.id;
+    const waStatus = status.status;
+
+    const statusMap = {
+      'sent': 'SENT',
+      'delivered': 'DELIVERED',
+      'read': 'READ',
+      'failed': 'FAILED'
+    };
+
+    const dbStatus = statusMap[waStatus];
+    if (!dbStatus) return;
+
+    const dbMessage = await prisma.message.findFirst({
       where: { externalId }
     });
 
-    if (!message) {
-      logger.warn('Message not found for status update', { externalId });
-      return;
+    if (!dbMessage) return;
+
+    const updateData = { status: dbStatus };
+    if (dbStatus === 'DELIVERED') updateData.deliveredAt = new Date();
+    if (dbStatus === 'READ') updateData.readAt = new Date();
+    if (dbStatus === 'FAILED') {
+      updateData.failedAt = new Date();
+      updateData.error = status.errors?.[0]?.message || 'Unknown error';
     }
 
     await prisma.message.update({
-      where: { id: message.id },
-      data: {
-        status,
-        ...additionalData
-      }
+      where: { id: dbMessage.id },
+      data: updateData
     });
 
-    // Mettre à jour les statistiques de la campagne si applicable
-    if (message.campaignId) {
-      const updateData = {};
-      
-      if (status === 'DELIVERED') {
-        updateData.delivered = { increment: 1 };
-      } else if (status === 'READ') {
-        updateData.read = { increment: 1 };
-      }
+    // Mettre à jour les statistiques de la campagne
+    if (dbMessage.campaignId) {
+      const campaignUpdate = {};
+      if (dbStatus === 'DELIVERED') campaignUpdate.delivered = { increment: 1 };
+      if (dbStatus === 'READ') campaignUpdate.read = { increment: 1 };
+      if (dbStatus === 'FAILED') campaignUpdate.failed = { increment: 1 };
 
-      if (Object.keys(updateData).length > 0) {
+      if (Object.keys(campaignUpdate).length > 0) {
         await prisma.campaign.update({
-          where: { id: message.campaignId },
-          data: updateData
+          where: { id: dbMessage.campaignId },
+          data: campaignUpdate
         });
       }
     }
 
-    logger.info('Message status updated', { externalId, status });
+    logger.info('Message status updated', { externalId, status: dbStatus });
   } catch (error) {
-    logger.error('Error updating message status', { error: error.message, externalId });
-  }
-}
-
-// ============================================
-// Gestionnaire: Message échoué
-// ============================================
-async function handleFailedMessage(data) {
-  try {
-    const { messageId, error } = data;
-
-    await updateMessageStatus(messageId, 'FAILED', {
-      failedAt: new Date(),
-      error: error?.message || 'Unknown error'
-    });
-
-    // Incrémenter le compteur d'échecs de la campagne
-    const message = await prisma.message.findFirst({
-      where: { externalId: messageId }
-    });
-
-    if (message?.campaignId) {
-      await prisma.campaign.update({
-        where: { id: message.campaignId },
-        data: { failed: { increment: 1 } }
-      });
-    }
-
-    logger.warn('Message failed', { messageId, error: error?.message });
-  } catch (err) {
-    logger.error('Error handling failed message', { error: err.message });
-  }
-}
-
-// ============================================
-// Gestionnaire: Contact créé
-// ============================================
-async function handleContactCreated(data) {
-  try {
-    const { id, phone, name } = data;
-
-    // Vérifier si le contact existe déjà
-    const existingContact = await prisma.contact.findUnique({
-      where: { phone }
-    });
-
-    if (!existingContact) {
-      await prisma.contact.create({
-        data: {
-          phone,
-          name,
-          whatsappId: id,
-          optedIn: true,
-          optedInAt: new Date()
-        }
-      });
-
-      logger.info('Contact created from webhook', { phone: phone.replace(/\d(?=\d{4})/g, '*') });
-    }
-  } catch (error) {
-    logger.error('Error handling contact created', { error: error.message });
-  }
-}
-
-// ============================================
-// Gestionnaire: Contact mis à jour
-// ============================================
-async function handleContactUpdated(data) {
-  try {
-    const { id, phone, name } = data;
-
-    await prisma.contact.updateMany({
-      where: { whatsappId: id },
-      data: {
-        phone,
-        name,
-        lastActivity: new Date()
-      }
-    });
-
-    logger.info('Contact updated from webhook', { whatsappId: id });
-  } catch (error) {
-    logger.error('Error handling contact updated', { error: error.message });
+    logger.error('Error updating message status', { error: error.message });
   }
 }
 
@@ -286,8 +215,8 @@ async function handleContactUpdated(data) {
 // GET /webhooks/health - Health check
 // ============================================
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     service: 'webhooks',
     timestamp: new Date().toISOString()
   });

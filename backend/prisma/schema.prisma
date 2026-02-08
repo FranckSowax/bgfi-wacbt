@@ -163,7 +163,7 @@ model Message {
   
   // Status tracking
   status      MessageStatus @default(PENDING)
-  externalId  String?       // Respond.io message ID
+  externalId  String?       // WhatsApp message ID (wamid)
   
   // Timestamps
   sentAt      DateTime?
