@@ -118,6 +118,49 @@ app.post('/api/debug/whatsapp-send', async (req, res) => {
   }
 });
 
+// Check System User's assigned assets + try register phone
+app.get('/api/debug/whatsapp-assets', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    const userId = '122101446639248836'; // from token debug
+
+    // 1. Check WABA phone numbers
+    let wabaPhones = 'unknown';
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v21.0/${wabaId}/phone_numbers`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      wabaPhones = r.data;
+    } catch (e) { wabaPhones = e.response?.data?.error || e.message; }
+
+    // 2. Try to register phone for Cloud API messaging
+    let registerResult = 'unknown';
+    try {
+      const r = await axios.post(`https://graph.facebook.com/v21.0/${phoneId}/register`, {
+        messaging_product: 'whatsapp',
+        pin: '123456'
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      registerResult = r.data;
+    } catch (e) { registerResult = e.response?.data?.error || e.message; }
+
+    // 3. Check System User's assigned WABAs
+    let userAssets = 'unknown';
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v21.0/${userId}/assigned_business_asset_groups`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      userAssets = r.data;
+    } catch (e) { userAssets = e.response?.data?.error || e.message; }
+
+    res.json({ wabaPhones, registerResult, userAssets });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
