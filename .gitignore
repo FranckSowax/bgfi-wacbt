@@ -81,3 +81,6 @@ rag-service-logs/
 
 # OpenMemory - IDE/Assistant specific rules
 .windsurf/rules/openmemory.md
+
+# Local Netlify folder
+.netlify
