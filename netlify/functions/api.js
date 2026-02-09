@@ -62,13 +62,45 @@ app.get('/api/health', (req, res) => {
 // Temporary: Test WhatsApp Cloud API connectivity
 app.get('/api/debug/whatsapp-test', async (req, res) => {
   try {
-    const whatsappService = require('../../backend/src/services/whatsapp');
+    const axios = require('axios');
+    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+
+    // 1. Check token validity
+    let tokenCheck = 'unknown';
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v21.0/debug_token?input_token=${token}&access_token=${token}`);
+      tokenCheck = r.data?.data || r.data;
+    } catch (e) { tokenCheck = e.response?.data?.error?.message || e.message; }
+
+    // 2. Check phone number
+    let phoneCheck = 'unknown';
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v21.0/${phoneId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      phoneCheck = r.data;
+    } catch (e) { phoneCheck = e.response?.data?.error?.message || e.message; }
+
+    // 3. Check WABA
+    let wabaCheck = 'unknown';
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v21.0/${wabaId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      wabaCheck = r.data;
+    } catch (e) { wabaCheck = e.response?.data?.error?.message || e.message; }
+
     res.json({
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ? '✓ configured' : '✗ missing',
-      accessToken: process.env.WHATSAPP_ACCESS_TOKEN ? '✓ configured (' + process.env.WHATSAPP_ACCESS_TOKEN.slice(0, 10) + '...)' : '✗ missing',
-      verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ? '✓ configured' : '✗ missing',
-      appSecret: process.env.WHATSAPP_APP_SECRET ? '✓ configured' : '✗ missing',
-      wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? '✓ configured' : '✗ missing'
+      config: {
+        phoneNumberId: phoneId ? phoneId : '✗ missing',
+        accessToken: token ? token.slice(0, 15) + '...' : '✗ missing',
+        wabaId: wabaId ? wabaId : '✗ missing',
+      },
+      tokenInfo: tokenCheck,
+      phoneNumberInfo: phoneCheck,
+      wabaInfo: wabaCheck
     });
   } catch (error) {
     res.json({ error: error.message });
