@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 
 const whatsappService = require('../services/whatsapp');
+const ragService = require('../services/rag');
 const logger = require('../utils/logger');
 
 const prisma = new PrismaClient();
@@ -105,63 +106,30 @@ async function handleIncomingMessage(message, contacts) {
       });
     }
 
-    // Chatbot automatique : repond a tous les messages texte entrants
+    // Chatbot automatique : repond a tous les messages texte entrants via RAG
     if (message.type === 'text' && message.text?.body) {
       const text = message.text.body;
       const autoReply = process.env.CHATBOT_AUTO_REPLY !== 'false'; // ON par defaut
 
       if (autoReply) {
         try {
-          const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL;
-          let botReply = null;
+          // Utiliser le service RAG interne (pgvector + OpenAI)
+          const result = await ragService.chat(text, dbContact.id);
+          const botReply = result.response;
 
-          // Strategie 1 : Service RAG externe (si configure)
-          if (RAG_SERVICE_URL) {
-            try {
-              const axios = require('axios');
-              const ragResponse = await axios.post(`${RAG_SERVICE_URL}/chat`, {
-                message: text,
-                contact_id: dbContact.id
-              }, { timeout: 15000 });
-              botReply = ragResponse.data?.response;
-            } catch (ragErr) {
-              logger.warn('RAG service unavailable, falling back to OpenAI', { error: ragErr.message });
-            }
-          }
-
-          // Strategie 2 : Appel direct OpenAI (fallback ou mode principal)
-          if (!botReply && process.env.OPENAI_API_KEY) {
-            const fetch = require('node-fetch');
-            const systemPrompt = process.env.CHATBOT_SYSTEM_PROMPT ||
-              `Tu es Cassiopee, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp. Tu reponds de maniere concise, professionnelle et chaleureuse en francais. Tu aides les clients avec leurs questions bancaires (comptes, cartes, virements, agences, horaires, produits). Si tu ne connais pas la reponse, oriente le client vers le service client au 011 76 32 29. Ne fournis jamais d'informations sensibles sur les comptes. Reponds en 2-3 phrases maximum.`;
-
-            const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-              body: JSON.stringify({
-                model: process.env.OPENAI_MODEL || 'gpt-4',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: text }
-                ],
-                temperature: 0.5,
-                max_tokens: 300
-              })
-            });
-
-            const aiData = await aiResponse.json();
-            botReply = aiData.choices?.[0]?.message?.content;
-          }
-
-          // Envoyer la reponse via WhatsApp
           if (botReply) {
             await whatsappService.sendMessage(phone, botReply);
-            logger.info('Auto-reply sent', { contactId: dbContact.id, source: RAG_SERVICE_URL ? 'RAG' : 'OpenAI' });
+            logger.info('Auto-reply sent via RAG', {
+              contactId: dbContact.id,
+              chunks_used: result.chunks_used,
+              sources: result.sources
+            });
 
             // Sauvegarder la session de chat
             await prisma.chatSession.create({
               data: {
                 contactId: dbContact.id,
+                source: 'whatsapp',
                 messages: [
                   { role: 'user', content: text, timestamp: new Date() },
                   { role: 'bot', content: botReply, timestamp: new Date() }
@@ -169,7 +137,7 @@ async function handleIncomingMessage(message, contacts) {
               }
             }).catch(() => {}); // Non-blocking
           } else {
-            logger.warn('No AI response available (check OPENAI_API_KEY or RAG_SERVICE_URL)');
+            logger.warn('No AI response available (check OPENAI_API_KEY)');
           }
         } catch (chatErr) {
           logger.error('Error in auto-reply', { error: chatErr.message });

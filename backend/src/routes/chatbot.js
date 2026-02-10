@@ -1,16 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const axios = require('axios');
+const multer = require('multer');
 const { PrismaClient } = require('@prisma/client');
 
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const ragService = require('../services/rag');
 
 const prisma = new PrismaClient();
-const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || 'http://localhost:8000';
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
 
 // ============================================
-// POST /api/chatbot/message - Envoyer un message
+// POST /api/chatbot/message - Chat avec le RAG
 // ============================================
 router.post('/message', async (req, res) => {
   try {
@@ -20,46 +21,42 @@ router.post('/message', async (req, res) => {
       return res.status(400).json({ error: 'Message requis' });
     }
 
-    // Appeler le service RAG
-    const response = await axios.post(`${RAG_SERVICE_URL}/chat`, {
-      message,
-      session_id: sessionId,
-      contact_id: contactId
-    });
+    // Appeler le service RAG interne
+    const result = await ragService.chat(message, contactId);
 
-    // Sauvegarder la session si contactId est fourni
-    if (contactId) {
-      // Mettre à jour ou créer la session
-      await prisma.chatSession.upsert({
-        where: { id: sessionId || 'new' },
-        update: {
-          messages: {
-            push: [
-              { role: 'user', content: message, timestamp: new Date() },
-              { role: 'bot', content: response.data.response, timestamp: new Date() }
-            ]
-          }
-        },
-        create: {
-          contactId,
+    // Sauvegarder la session
+    let newSessionId = sessionId;
+    try {
+      const session = await prisma.chatSession.create({
+        data: {
+          contactId: contactId || null,
+          source: 'web',
           messages: [
             { role: 'user', content: message, timestamp: new Date() },
-            { role: 'bot', content: response.data.response, timestamp: new Date() }
+            { role: 'bot', content: result.response, timestamp: new Date() }
           ]
         }
       });
+      newSessionId = session.id;
+    } catch (err) {
+      logger.warn('Failed to save chat session', { error: err.message });
     }
 
-    res.json(response.data);
+    res.json({
+      response: result.response,
+      sources: result.sources,
+      chunks_used: result.chunks_used,
+      sessionId: newSessionId
+    });
   } catch (error) {
-    logger.error('Error in chatbot message', { 
+    logger.error('Error in chatbot message', {
       error: error.message,
       message: req.body.message?.substring(0, 50)
     });
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Erreur lors du traitement du message',
-      response: 'Désolé, une erreur est survenue. Veuillez réessayer ou contacter le service client au 0770 12 34 56.'
+      response: 'Desole, une erreur est survenue. Veuillez reessayer ou contacter le service client au 011 76 32 29.'
     });
   }
 });
@@ -69,28 +66,96 @@ router.post('/message', async (req, res) => {
 // ============================================
 router.get('/knowledge', authenticate, async (req, res) => {
   try {
-    const response = await axios.get(`${RAG_SERVICE_URL}/documents`);
-    res.json(response.data);
+    const docs = await ragService.listDocuments();
+
+    // Formater pour le frontend (attend: { documents: [{ id, name, type, uploadedAt }] })
+    res.json({
+      documents: docs.map(d => ({
+        id: d.id,
+        name: d.title,
+        type: d.type,
+        chunkCount: d.chunk_count,
+        uploadedAt: d.created_at
+      }))
+    });
   } catch (error) {
     logger.error('Error fetching knowledge documents', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de la récupération des documents' });
+    res.status(500).json({ error: 'Erreur lors de la recuperation des documents', documents: [] });
   }
 });
 
 // ============================================
 // POST /api/chatbot/knowledge/upload - Uploader un document
 // ============================================
-router.post('/knowledge/upload', authenticate, async (req, res) => {
+router.post('/knowledge/upload', authenticate, upload.single('file'), async (req, res) => {
   try {
-    // Forward to RAG service
-    // Note: In production, use multipart upload
-    res.json({ 
-      message: 'Upload démarré',
-      note: 'Utilisez le service RAG directement pour l\'upload de documents'
+    if (!req.file) {
+      return res.status(400).json({ error: 'Fichier requis' });
+    }
+
+    const file = req.file;
+    const fileName = file.originalname;
+    const fileType = fileName.split('.').pop().toLowerCase();
+    let content = '';
+
+    // Extraire le texte selon le type de fichier
+    if (fileType === 'pdf') {
+      try {
+        const pdfParse = require('pdf-parse');
+        const pdfData = await pdfParse(file.buffer);
+        content = pdfData.text;
+      } catch (err) {
+        logger.error('PDF parsing error', { error: err.message });
+        return res.status(400).json({ error: 'Impossible de lire le PDF: ' + err.message });
+      }
+    } else if (['txt', 'csv', 'md'].includes(fileType)) {
+      content = file.buffer.toString('utf-8');
+    } else if (['doc', 'docx', 'xls', 'xlsx'].includes(fileType)) {
+      // Pour les formats Office, extraire le texte brut du buffer
+      // Simplification: lire comme texte (fonctionne partiellement pour .doc)
+      content = file.buffer.toString('utf-8').replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (content.length < 50) {
+        return res.status(400).json({
+          error: 'Format non supporte. Veuillez convertir en PDF ou TXT avant upload.'
+        });
+      }
+    } else {
+      return res.status(400).json({ error: 'Format non supporte. Formats acceptes: PDF, TXT, CSV, MD' });
+    }
+
+    if (!content || content.trim().length < 10) {
+      return res.status(400).json({ error: 'Le document ne contient pas de texte extractible' });
+    }
+
+    // Ajouter au RAG
+    const doc = await ragService.addDocument(
+      fileName,
+      content,
+      fileType,
+      { originalName: fileName, size: file.size, mimeType: file.mimetype }
+    );
+
+    logger.info('Document uploaded to RAG', {
+      id: doc.id,
+      name: fileName,
+      type: fileType,
+      chunks: doc.chunk_count,
+      userId: req.user.id
+    });
+
+    res.json({
+      success: true,
+      message: `Document "${fileName}" indexe avec ${doc.chunk_count} chunks`,
+      document: {
+        id: doc.id,
+        name: fileName,
+        type: fileType,
+        chunkCount: doc.chunk_count
+      }
     });
   } catch (error) {
     logger.error('Error uploading document', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de l\'upload' });
+    res.status(500).json({ error: 'Erreur lors de l\'upload: ' + error.message });
   }
 });
 
@@ -100,12 +165,11 @@ router.post('/knowledge/upload', authenticate, async (req, res) => {
 router.delete('/knowledge/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    
-    await axios.delete(`${RAG_SERVICE_URL}/documents/${id}`);
-    
+    await ragService.deleteDocument(id);
+
     logger.info('Knowledge document deleted', { docId: id, userId: req.user.id });
-    
-    res.json({ success: true, message: 'Document supprimé' });
+
+    res.json({ success: true, message: 'Document supprime' });
   } catch (error) {
     logger.error('Error deleting document', { error: error.message, docId: req.params.id });
     res.status(500).json({ error: 'Erreur lors de la suppression' });
@@ -113,31 +177,27 @@ router.delete('/knowledge/:id', authenticate, async (req, res) => {
 });
 
 // ============================================
-// GET /api/chatbot/status - Statut du chatbot (env vars)
+// GET /api/chatbot/status - Statut du chatbot (env vars + RAG)
 // ============================================
 router.get('/status', authenticate, async (req, res) => {
   try {
     const autoReply = process.env.CHATBOT_AUTO_REPLY !== 'false';
-    const ragUrl = process.env.RAG_SERVICE_URL;
     const openaiKey = process.env.OPENAI_API_KEY;
     const model = process.env.OPENAI_MODEL || 'gpt-4';
-    const systemPrompt = process.env.CHATBOT_SYSTEM_PROMPT ||
-      "Tu es Cassiopee, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp...";
-    const fallbackMessage = process.env.CHATBOT_FALLBACK_MESSAGE ||
-      'Merci pour votre message. Un conseiller BGFI Bank vous repondra dans les plus brefs delais. Service client : 011 76 32 29';
 
-    // Check RAG service connectivity
-    let ragStatus = 'not_configured';
-    if (ragUrl) {
-      try {
-        await axios.get(`${ragUrl}/health`, { timeout: 5000 });
-        ragStatus = 'connected';
-      } catch {
-        ragStatus = 'unreachable';
-      }
+    // Verifier si le RAG est initialise
+    let ragReady = false;
+    let docCount = 0;
+    try {
+      const stats = await ragService.getStats();
+      ragReady = true;
+      docCount = stats.documents;
+    } catch {
+      ragReady = false;
     }
 
-    // Count recent sessions (last 24h)
+    const config = await ragService.getConfig().catch(() => ({}));
+
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentSessions = await prisma.chatSession.count({
       where: { createdAt: { gte: oneDayAgo } }
@@ -146,16 +206,17 @@ router.get('/status', authenticate, async (req, res) => {
     res.json({
       enabled: autoReply,
       ragService: {
-        configured: !!ragUrl,
-        status: ragStatus,
-        url: ragUrl ? ragUrl.replace(/\/\/(.+?)@/, '//*****@') : null
+        configured: ragReady,
+        status: ragReady ? 'connected' : 'not_initialized',
+        documents: docCount
       },
       openai: {
         configured: !!openaiKey,
         model
       },
-      systemPromptPreview: systemPrompt.substring(0, 150) + (systemPrompt.length > 150 ? '...' : ''),
-      fallbackMessage,
+      systemPromptPreview: (config.systemPrompt || "Tu es Cassiopee, l'assistant virtuel de BGFI Bank Gabon...").substring(0, 150) + '...',
+      fallbackMessage: process.env.CHATBOT_FALLBACK_MESSAGE ||
+        'Merci pour votre message. Un conseiller BGFI Bank vous repondra dans les plus brefs delais. Service client : 011 76 32 29',
       recentSessions
     });
   } catch (error) {
@@ -169,29 +230,28 @@ router.get('/status', authenticate, async (req, res) => {
 // ============================================
 router.get('/config', authenticate, async (req, res) => {
   try {
-    const response = await axios.get(`${RAG_SERVICE_URL}/config`);
-    res.json(response.data);
+    const config = await ragService.getConfig();
+    res.json(config);
   } catch (error) {
     logger.error('Error fetching RAG config', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de la récupération de la configuration' });
+    res.status(500).json({ error: 'Erreur lors de la recuperation de la configuration' });
   }
 });
 
 // ============================================
-// POST /api/chatbot/config - Mettre à jour la config
+// POST /api/chatbot/config - Mettre a jour la config RAG
 // ============================================
 router.post('/config', authenticate, async (req, res) => {
   try {
     const config = req.body;
-    
-    const response = await axios.post(`${RAG_SERVICE_URL}/config`, config);
-    
-    logger.info('RAG config updated', { userId: req.user.id, config });
-    
-    res.json(response.data);
+    const updated = await ragService.updateConfig(config);
+
+    logger.info('RAG config updated', { userId: req.user.id });
+
+    res.json(updated);
   } catch (error) {
     logger.error('Error updating RAG config', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de la mise à jour' });
+    res.status(500).json({ error: 'Erreur lors de la mise a jour' });
   }
 });
 
@@ -200,11 +260,11 @@ router.post('/config', authenticate, async (req, res) => {
 // ============================================
 router.get('/stats', authenticate, async (req, res) => {
   try {
-    const response = await axios.get(`${RAG_SERVICE_URL}/stats`);
-    res.json(response.data);
+    const stats = await ragService.getStats();
+    res.json(stats);
   } catch (error) {
     logger.error('Error fetching RAG stats', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de la récupération des statistiques' });
+    res.status(500).json({ error: 'Erreur lors de la recuperation des statistiques' });
   }
 });
 
@@ -245,7 +305,23 @@ router.get('/sessions', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching chat sessions', { error: error.message });
-    res.status(500).json({ error: 'Erreur lors de la récupération des sessions' });
+    res.status(500).json({ error: 'Erreur lors de la recuperation des sessions' });
+  }
+});
+
+// ============================================
+// POST /api/chatbot/setup - Initialiser les tables RAG
+// ============================================
+router.post('/setup', authenticate, async (req, res) => {
+  try {
+    const result = await ragService.initialize();
+    res.json({
+      success: result,
+      message: result ? 'Tables RAG initialisees avec succes' : 'Echec de l\'initialisation'
+    });
+  } catch (error) {
+    logger.error('Error setting up RAG', { error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 

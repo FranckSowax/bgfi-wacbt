@@ -57,7 +57,7 @@ app.get('/api/health', (req, res) => {
       openai: !!process.env.OPENAI_API_KEY,
       supabase: !!process.env.SUPABASE_URL,
       redis: process.env.REDIS_ENABLED !== 'false' && !!process.env.REDIS_HOST,
-      chatbot: process.env.CHATBOT_AUTO_REPLY !== 'false' && (!!process.env.OPENAI_API_KEY || !!process.env.RAG_SERVICE_URL)
+      chatbot: process.env.CHATBOT_AUTO_REPLY !== 'false' && !!process.env.OPENAI_API_KEY
     }
   });
 });
