@@ -45,7 +45,7 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Sector, Cell, BarChart, Bar } = Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Sector, Cell, BarChart, Bar, Rectangle } = Recharts;
 
         // =============================================
         // API Layer
@@ -1643,12 +1643,16 @@
             const [activeCityIndex, setActiveCityIndex] = useState(null);
             const [activeAccountPie, setActiveAccountPie] = useState(0);
 
-            // Performance BarChart data
+            // Performance BarChart data (active bar style - each month has its own color)
             const perfData = useMemo(() => {
                 if (!campaignStats?.data) return [];
-                return campaignStats.data.slice(-6).map(d => ({
-                    ...d,
-                    date: d.date ? new Date(d.date + '-01').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) : d.date
+                const fills = ['#1e3a5f', '#2d5a87', '#3b82f6', '#00a86b', '#8b5cf6', '#f59e0b'];
+                return campaignStats.data.slice(-6).map((d, i) => ({
+                    month: d.date ? new Date(d.date + '-01').toLocaleDateString('fr-FR', { month: 'short' }) : d.date,
+                    total: (d.sent || 0),
+                    delivered: (d.delivered || 0),
+                    read: (d.read || 0),
+                    fill: fills[i % fills.length]
                 }));
             }, [campaignStats]);
 
@@ -1682,15 +1686,20 @@
                 return days;
             }, [contactAnalytics]);
 
-            // Engagement gauges (delivery, open, click)
-            const gauges = useMemo(() => {
-                if (!dash?.overview) return [];
-                const o = dash.overview;
-                return [
-                    { name: 'Delivrance', value: parseFloat(o.deliveryRate) || 0, fill: '#00a86b' },
-                    { name: 'Ouverture', value: parseFloat(o.openRate) || 0, fill: '#3b82f6' },
-                    { name: 'Clics', value: parseFloat(o.clickRate) || 0, fill: '#f59e0b' }
-                ];
+            // Engagement horizontal bar data (recent campaigns by sent count)
+            const engagementBarData = useMemo(() => {
+                if (!dash?.recentCampaigns) return [];
+                return dash.recentCampaigns
+                    .filter(c => c.sent > 0)
+                    .slice(0, 5)
+                    .map(c => ({
+                        name: c.name.length > 18 ? c.name.substring(0, 18) + '...' : c.name,
+                        fullName: c.name,
+                        sent: c.sent,
+                        delivered: c.delivered,
+                        read: c.read
+                    }))
+                    .reverse();
             }, [dash]);
 
             // Top campagnes
@@ -1756,53 +1765,75 @@
                         </div>
                     </div>
 
-                    {/* Row 2: Performance BarChart + Engagement Gauges */}
+                    {/* Row 2: Active BarChart + Horizontal BarChart */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Performance - Active Bar Chart */}
                         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100">
                             <div className="p-6 pb-0">
                                 <h3 className="text-lg font-semibold text-gray-900">Performance des Campagnes</h3>
-                                <p className="text-sm text-gray-500 mt-0.5">Messages envoyes, delivres et lus par mois</p>
+                                <p className="text-sm text-gray-500 mt-0.5">Volume de messages envoyes par mois</p>
                             </div>
                             <div className="p-6 pt-4" style={{ height: 300 }}>
                                 {perfData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={perfData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                            <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                                            <CartesianGrid vertical={false} stroke="#f0f0f0" strokeDasharray="3 3" />
+                                            <XAxis dataKey="month" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
                                             <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} width={45} />
-                                            <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 13 }} />
-                                            <Bar dataKey="sent" name="Envoyes" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
-                                            <Bar dataKey="delivered" name="Delivres" fill="#00a86b" radius={[4, 4, 0, 0]} />
-                                            <Bar dataKey="read" name="Lus" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                            <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                                            <Tooltip cursor={false} contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 13 }} formatter={(value, name, props) => { const d = props.payload; return [value + ' messages', 'Envoyes']; }} labelFormatter={(v) => v} />
+                                            <Bar
+                                                dataKey="total"
+                                                name="Messages"
+                                                strokeWidth={2}
+                                                radius={8}
+                                                activeIndex={perfData.length - 1}
+                                                activeBar={(props) => (
+                                                    <Rectangle {...props} fillOpacity={0.85} stroke={props.payload.fill} strokeWidth={2} strokeDasharray="4 4" strokeDashoffset={4} />
+                                                )}
+                                            >
+                                                {perfData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                                            </Bar>
                                         </BarChart>
                                     </ResponsiveContainer>
                                 ) : <div className="flex items-center justify-center h-full text-gray-400 text-sm">Aucune donnee de campagne</div>}
                             </div>
+                            <div className="px-6 pb-4 flex items-center justify-between text-sm border-t border-gray-50 pt-3">
+                                <div className="flex items-center gap-1.5 text-gray-600">
+                                    {perfData.length >= 2 && (() => {
+                                        const curr = perfData[perfData.length - 1]?.total || 0;
+                                        const prev = perfData[perfData.length - 2]?.total || 1;
+                                        const pct = prev > 0 ? (((curr - prev) / prev) * 100).toFixed(1) : 0;
+                                        const up = curr >= prev;
+                                        return (<><span className={`font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>{up ? '+' : ''}{pct}%</span><span>vs mois precedent</span>{up ? <Icons.TrendingUp /> : null}</>);
+                                    })()}
+                                </div>
+                                <span className="text-gray-400">6 derniers mois</span>
+                            </div>
                         </div>
+
+                        {/* Engagement - Horizontal Bar Chart */}
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
                             <div className="p-6 pb-2">
-                                <h3 className="text-lg font-semibold text-gray-900">Taux d'Engagement</h3>
-                                <p className="text-sm text-gray-500 mt-0.5">Performance globale des envois</p>
+                                <h3 className="text-lg font-semibold text-gray-900">Campagnes Recentes</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">Messages envoyes par campagne</p>
                             </div>
-                            <div className="p-6 pt-2 space-y-5">
-                                {gauges.map(g => (
-                                    <div key={g.name}>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-sm font-medium text-gray-700">{g.name}</span>
-                                            <span className="text-sm font-bold" style={{ color: g.fill }}>{g.value.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full rounded-full transition-all duration-700" style={{ width: Math.min(g.value, 100) + '%', backgroundColor: g.fill }} />
-                                        </div>
-                                    </div>
-                                ))}
-                                <div className="pt-3 border-t border-gray-100 mt-4">
-                                    <div className="grid grid-cols-3 gap-3 text-center">
-                                        <div><p className="text-lg font-bold text-gray-900">{camp.total || 0}</p><p className="text-xs text-gray-500">Campagnes</p></div>
-                                        <div><p className="text-lg font-bold text-gray-900">{camp.active || 0}</p><p className="text-xs text-gray-500">En cours</p></div>
-                                        <div><p className="text-lg font-bold text-gray-900">{camp.scheduled || 0}</p><p className="text-xs text-gray-500">Planifiees</p></div>
-                                    </div>
+                            <div className="p-4 pt-2" style={{ height: 260 }}>
+                                {engagementBarData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={engagementBarData} layout="vertical" margin={{ left: -20, right: 16, top: 0, bottom: 0 }}>
+                                            <XAxis type="number" dataKey="sent" hide />
+                                            <YAxis dataKey="name" type="category" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11, fill: '#6b7280' }} width={110} />
+                                            <Tooltip cursor={false} contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 13 }} formatter={(value, name, props) => [value + ' messages', 'Envoyes']} labelFormatter={(v, payload) => payload?.[0]?.payload?.fullName || v} />
+                                            <Bar dataKey="sent" fill="#1e3a5f" radius={5} barSize={18} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                ) : <div className="flex items-center justify-center h-full text-gray-400 text-sm">Aucune campagne recente</div>}
+                            </div>
+                            <div className="px-6 pb-4 border-t border-gray-50 pt-3">
+                                <div className="grid grid-cols-3 gap-3 text-center">
+                                    <div><p className="text-lg font-bold text-gray-900">{camp.total || 0}</p><p className="text-xs text-gray-500">Total</p></div>
+                                    <div><p className="text-lg font-bold text-emerald-600">{camp.completed || 0}</p><p className="text-xs text-gray-500">Terminees</p></div>
+                                    <div><p className="text-lg font-bold text-blue-600">{camp.active || 0}</p><p className="text-xs text-gray-500">En cours</p></div>
                                 </div>
                             </div>
                         </div>
