@@ -45,7 +45,7 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadialBarChart, RadialBar, PolarAngleAxis } = Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Sector, Cell } = Recharts;
 
         // =============================================
         // API Layer
@@ -347,7 +347,8 @@
         const DashboardView = ({ onNavigate }) => {
             const { data: dash, loading, error, refetch } = useApi('/analytics/dashboard');
             const { data: contactStats } = useApi('/contacts/stats/overview');
-            const [timeRange, setTimeRange] = useState('90j');
+            const [timeRange, setTimeRange] = useState('7j');
+            const [activePieIndex, setActivePieIndex] = useState(0);
 
             const filteredChartData = useMemo(() => {
                 const days = timeRange === '7j' ? 7 : timeRange === '30j' ? 30 : 90;
@@ -388,9 +389,9 @@
                                     <p className="text-sm text-gray-500 mt-0.5">Messages envoyes, delivres et lus</p>
                                 </div>
                                 <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-bgfi-primary/20">
-                                    <option value="90j">3 derniers mois</option>
-                                    <option value="30j">30 derniers jours</option>
                                     <option value="7j">7 derniers jours</option>
+                                    <option value="30j">30 derniers jours</option>
+                                    <option value="90j">3 derniers mois</option>
                                 </select>
                             </div>
                             <div className="p-6 pt-4" style={{ height: 300 }}>
@@ -430,17 +431,39 @@
                             <div className="flex-1 px-2 pb-0" style={{ minHeight: 220 }}>
                                 {radialData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height={220}>
-                                        <RadialBarChart cx="50%" cy="50%" innerRadius={25} outerRadius={100} data={radialData} startAngle={180} endAngle={-180} barSize={12}>
-                                            <RadialBar background={{ fill: '#f3f4f6' }} dataKey="value" cornerRadius={6}>
-                                            </RadialBar>
-                                            <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 13 }} formatter={(value, name, props) => [value + ' contacts', props.payload.name]} />
-                                        </RadialBarChart>
+                                        <PieChart>
+                                            <Pie
+                                                data={radialData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={55}
+                                                outerRadius={80}
+                                                dataKey="value"
+                                                activeIndex={activePieIndex}
+                                                activeShape={(props) => {
+                                                    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
+                                                    return (
+                                                        <g>
+                                                            <text x={cx} y={cy - 4} textAnchor="middle" dominantBaseline="central" style={{ fontSize: 24, fontWeight: 700, fill: fill }}>{value}</text>
+                                                            <text x={cx} y={cy + 18} textAnchor="middle" dominantBaseline="central" style={{ fontSize: 12, fill: '#6b7280' }}>{payload.name}</text>
+                                                            <Sector cx={cx} cy={cy} innerRadius={innerRadius - 4} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+                                                            <Sector cx={cx} cy={cy} innerRadius={outerRadius + 10} outerRadius={outerRadius + 14} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+                                                        </g>
+                                                    );
+                                                }}
+                                                onMouseEnter={(_, index) => setActivePieIndex(index)}
+                                            >
+                                                {radialData.map((entry, index) => (
+                                                    <Cell key={index} fill={entry.fill} stroke="none" />
+                                                ))}
+                                            </Pie>
+                                        </PieChart>
                                     </ResponsiveContainer>
                                 ) : <div className="flex items-center justify-center h-full text-gray-400 text-sm">Chargement...</div>}
                             </div>
                             <div className="px-6 pb-5 pt-1 space-y-1.5">
-                                {radialData.map(d => (
-                                    <div key={d.name} className="flex items-center justify-between text-sm">
+                                {radialData.map((d, i) => (
+                                    <div key={d.name} className={`flex items-center justify-between text-sm px-2 py-1 rounded-lg cursor-pointer transition-colors ${i === activePieIndex ? 'bg-gray-50' : ''}`} onMouseEnter={() => setActivePieIndex(i)}>
                                         <div className="flex items-center gap-2">
                                             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.fill }} />
                                             <span className="text-gray-600">{d.name}</span>
