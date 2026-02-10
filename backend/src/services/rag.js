@@ -281,11 +281,16 @@ async function chat(message, contactId = null) {
 // Lister les documents
 // ============================================
 async function listDocuments() {
-  await initialize();
-  return prisma.$queryRawUnsafe(
-    `SELECT id, title, type, chunk_count, metadata, created_at, updated_at
-     FROM rag_documents ORDER BY created_at DESC`
-  );
+  const ready = await initialize();
+  if (!ready) return [];
+  try {
+    return await prisma.$queryRawUnsafe(
+      `SELECT id, title, type, chunk_count, metadata, created_at, updated_at
+       FROM rag_documents ORDER BY created_at DESC`
+    );
+  } catch {
+    return [];
+  }
 }
 
 // ============================================
@@ -302,8 +307,25 @@ async function deleteDocument(id) {
 // Lire la configuration RAG
 // ============================================
 async function getConfig() {
-  await initialize();
-  const rows = await prisma.$queryRawUnsafe(`SELECT * FROM rag_config WHERE id = 1`);
+  const ready = await initialize();
+  if (!ready) {
+    return {
+      botName: 'Cassiopee',
+      systemPrompt: "Tu es Cassiopee, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp. Tu reponds de maniere concise, professionnelle et chaleureuse en francais. Tu aides les clients avec leurs questions bancaires. Si tu ne connais pas la reponse, oriente le client vers le service client au 011 76 32 29. Ne fournis jamais d'informations sensibles sur les comptes. Reponds en 2-3 phrases maximum.",
+      system_prompt: "Tu es Cassiopee, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp.",
+      model: 'gpt-4',
+      chunkCount: 5, chunk_count: 5,
+      similarityThreshold: 0.7, similarity_threshold: 0.7,
+      includeSources: true, include_sources: true,
+      fallbackResponse: true
+    };
+  }
+  let rows;
+  try {
+    rows = await prisma.$queryRawUnsafe(`SELECT * FROM rag_config WHERE id = 1`);
+  } catch {
+    return { botName: 'Cassiopee', model: 'gpt-4', chunkCount: 5, chunk_count: 5, similarityThreshold: 0.7, similarity_threshold: 0.7, includeSources: true, include_sources: true, fallbackResponse: true };
+  }
   if (!rows[0]) return {};
 
   const c = rows[0];
@@ -369,9 +391,17 @@ async function updateConfig(updates) {
 // Statistiques RAG
 // ============================================
 async function getStats() {
-  await initialize();
-  const docs = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM rag_documents`);
-  const chunks = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM rag_chunks`);
+  const ready = await initialize();
+
+  let docCount = 0, chunkCount = 0;
+  if (ready) {
+    try {
+      const docs = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM rag_documents`);
+      const chunks = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM rag_chunks`);
+      docCount = docs[0]?.count || 0;
+      chunkCount = chunks[0]?.count || 0;
+    } catch { /* tables not ready */ }
+  }
 
   // Sessions 24h
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -380,9 +410,10 @@ async function getStats() {
   }).catch(() => 0);
 
   return {
-    documents: docs[0]?.count || 0,
-    chunks: chunks[0]?.count || 0,
-    sessions_24h: sessions
+    documents: docCount,
+    chunks: chunkCount,
+    sessions_24h: sessions,
+    ragInitialized: ready
   };
 }
 
