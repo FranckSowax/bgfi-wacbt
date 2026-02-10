@@ -209,6 +209,64 @@ router.put('/:id', authenticate, authorize(['template:update']), async (req, res
 });
 
 // ============================================
+// POST /api/templates/:id/duplicate - Dupliquer un template
+// ============================================
+router.post('/:id/duplicate', authenticate, authorize(['template:create']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, displayName, content, category } = req.body;
+
+    const source = await prisma.template.findUnique({ where: { id } });
+    if (!source) {
+      return res.status(404).json({ error: 'Template source non trouvé' });
+    }
+
+    const newName = (name || source.name + '_v2').toLowerCase().replace(/\s+/g, '_');
+    const newContent = content || source.content;
+    const variableMatches = newContent.match(/\{\{(\d+)\}\}/g) || [];
+    const variables = variableMatches.map((_, index) => `var${index + 1}`);
+
+    const template = await prisma.template.create({
+      data: {
+        name: newName,
+        displayName: displayName || source.displayName + ' (copie)',
+        category: (category || source.category).toUpperCase(),
+        content: newContent,
+        variables,
+        language: source.language,
+        status: 'PENDING'
+      }
+    });
+
+    // Soumettre à Meta pour approbation
+    const metaResult = await whatsappService.createTemplate({
+      name: template.name,
+      category: template.category.toLowerCase(),
+      content: newContent,
+      language: template.language
+    });
+
+    if (metaResult.success) {
+      await prisma.template.update({
+        where: { id: template.id },
+        data: { metaId: metaResult.templateId }
+      });
+    }
+
+    logger.info('Template duplicated', { sourceId: id, newId: template.id, userId: req.user.id });
+
+    res.status(201).json({
+      ...template,
+      message: 'Template dupliqué et soumis pour approbation Meta.',
+      metaStatus: metaResult.success ? 'submitted' : metaResult.error
+    });
+  } catch (error) {
+    logger.error('Error duplicating template', { error: error.message, templateId: req.params.id });
+    res.status(500).json({ error: 'Erreur lors de la duplication du template' });
+  }
+});
+
+// ============================================
 // DELETE /api/templates/:id - Supprimer un template
 // ============================================
 router.delete('/:id', authenticate, authorize(['template:delete']), async (req, res) => {

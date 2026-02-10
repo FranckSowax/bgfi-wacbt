@@ -873,6 +873,29 @@
                 finally { setSyncing(false); }
             };
 
+            const [dupModal, setDupModal] = useState(null);
+            const [dupForm, setDupForm] = useState({ name: '', displayName: '', category: '', content: '' });
+            const [duplicating, setDuplicating] = useState(false);
+
+            const openDuplicate = (template) => {
+                setDupForm({
+                    name: template.name + '_v2',
+                    displayName: (template.displayName || template.name) + ' (v2)',
+                    category: template.category,
+                    content: template.content
+                });
+                setDupModal(template);
+            };
+
+            const handleDuplicate = async () => {
+                setDuplicating(true);
+                try {
+                    await api('/templates/' + dupModal.id + '/duplicate', { method: 'POST', body: JSON.stringify(dupForm) });
+                    setDupModal(null); refetch();
+                } catch (err) { alert(err.message); }
+                finally { setDuplicating(false); }
+            };
+
             if (loading) return <Spinner />;
             if (error) return <ErrorBox message={error} onRetry={refetch} />;
 
@@ -900,7 +923,8 @@
                                 <div className="bg-gray-50 p-4 rounded-xl mb-4"><p className="text-sm text-gray-700 whitespace-pre-line">{template.content}</p></div>
                                 {template.variables && template.variables.length > 0 && <div className="mb-4 flex gap-1 flex-wrap">{template.variables.map((v, i) => <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{'{{'}{v}{'}}'}</span>)}</div>}
                                 <div className="flex gap-2">
-                                    <Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDelete(template.id)} />
+                                    <Button variant="ghost" size="sm" icon={Icons.Copy} onClick={() => openDuplicate(template)} title="Dupliquer" />
+                                    <Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDelete(template.id)} title="Supprimer" />
                                 </div>
                             </Card>
                         ))}
@@ -929,6 +953,35 @@
                                 <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                                     <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Annuler</Button>
                                     <Button onClick={handleCreate} disabled={creating || !form.name || !form.content} icon={Icons.CheckCircle}>{creating ? 'Creation...' : 'Soumettre pour approbation'}</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {dupModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <h2 className="text-xl font-semibold text-gray-900">Dupliquer & Modifier le Template</h2>
+                                    <button onClick={() => setDupModal(null)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <div className="bg-amber-50 p-4 rounded-xl"><p className="text-sm text-amber-800"><strong>Source :</strong> {dupModal.displayName || dupModal.name} ({tplStatusMap[dupModal.status] || dupModal.status})</p></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Nom technique" placeholder="relance_v2" value={dupForm.name} onChange={v => setDupForm({...dupForm, name: v})} />
+                                        <Input label="Nom d'affichage" placeholder="Relance V2" value={dupForm.displayName} onChange={v => setDupForm({...dupForm, displayName: v})} />
+                                    </div>
+                                    <Select label="Categorie" value={dupForm.category} onChange={v => setDupForm({...dupForm, category: v})} options={[{ value: 'MARKETING', label: 'Marketing' }, { value: 'UTILITY', label: 'Utilitaire' }, { value: 'AUTHENTICATION', label: 'Authentification' }]} />
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message</label>
+                                        <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" value={dupForm.content} onChange={(e) => setDupForm({...dupForm, content: e.target.value})} />
+                                        <p className="text-xs text-gray-500 mt-2">Modifiez le contenu puis soumettez. Utilisez {'{{1}}'}, {'{{2}}'}, etc. pour les variables.</p>
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Note :</strong> Le nouveau template sera soumis a Meta pour approbation (24-48h).</p></div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setDupModal(null)}>Annuler</Button>
+                                    <Button onClick={handleDuplicate} disabled={duplicating || !dupForm.name || !dupForm.content} icon={Icons.Copy}>{duplicating ? 'Duplication...' : 'Dupliquer & Soumettre'}</Button>
                                 </div>
                             </div>
                         </div>
