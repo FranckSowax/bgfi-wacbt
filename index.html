@@ -2193,16 +2193,6 @@
                             </div>
                         </Card>
                     </div>
-                    <Card title="Configuration WhatsApp">
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 rounded-xl" style={{ background: health?.services?.whatsapp ? '#ecfdf5' : '#fef2f2' }}>
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${health?.services?.whatsapp ? 'bg-emerald-500' : 'bg-red-400'}`}>{health?.services?.whatsapp ? <Icons.CheckCircle /> : <Icons.X />}</div>
-                                    <div><p className="font-medium text-gray-900">{health?.services?.whatsapp ? 'WhatsApp Cloud API connectee' : 'WhatsApp non configure'}</p><p className="text-sm text-gray-500">{health?.services?.whatsapp ? 'API Meta connectee' : 'Configurez WHATSAPP_ACCESS_TOKEN dans Netlify'}</p></div>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
                     <div className="flex justify-end gap-3">
                         <Button icon={Icons.CheckCircle}>Sauvegarder les modifications</Button>
                     </div>
