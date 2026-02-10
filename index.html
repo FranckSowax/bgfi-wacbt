@@ -1064,6 +1064,9 @@
             const { data, loading, error, refetch } = useApi('/contacts?limit=50' + (search ? '&search=' + encodeURIComponent(search) : '') + (categoryFilter ? '&category=' + categoryFilter : '') + (cityFilter ? '&city=' + encodeURIComponent(cityFilter) : '') + (accountTypeFilter ? '&accountType=' + accountTypeFilter : ''));
             const [form, setForm] = useState({ name: '', phone: '', email: '', category: 'ACTIVE', city: '', accountType: '', ageRange: '', gender: '' });
             const [creating, setCreating] = useState(false);
+            const [editContact, setEditContact] = useState(null);
+            const [editForm, setEditForm] = useState({});
+            const [saving, setSaving] = useState(false);
 
             const contacts = data?.data || [];
 
@@ -1098,6 +1101,36 @@
                 } catch (err) { alert('Erreur import: ' + err.message); }
             };
 
+            const openEditContact = (contact) => {
+                setEditForm({
+                    name: contact.name || '',
+                    email: contact.email || '',
+                    category: contact.category || 'ACTIVE',
+                    city: contact.city || '',
+                    accountType: contact.accountType || '',
+                    ageRange: contact.ageRange || '',
+                    gender: contact.gender || '',
+                    engagementScore: contact.engagementScore || 0
+                });
+                setEditContact(contact);
+            };
+
+            const handleEditContact = async () => {
+                setSaving(true);
+                try {
+                    const body = { ...editForm };
+                    if (!body.city) delete body.city;
+                    if (!body.accountType) delete body.accountType;
+                    if (!body.ageRange) delete body.ageRange;
+                    if (!body.gender) delete body.gender;
+                    body.engagementScore = parseInt(body.engagementScore) || 0;
+                    await api('/contacts/' + editContact.id, { method: 'PUT', body: JSON.stringify(body) });
+                    setEditContact(null);
+                    refetch();
+                } catch (err) { alert(err.message); }
+                finally { setSaving(false); }
+            };
+
             if (loading) return <Spinner />;
             if (error) return <ErrorBox message={error} onRetry={refetch} />;
 
@@ -1119,19 +1152,20 @@
                     <Card>
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Contact</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Telephone</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Ville</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Categorie</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Compte</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Engagement</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Opt-in</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
+                                <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Contact</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Telephone</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Ville</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Age</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Categorie</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Compte</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Engagement</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Opt-in</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {contacts.length === 0 && <tr><td colSpan="8" className="py-8 text-center text-gray-500">Aucun contact</td></tr>}
+                                    {contacts.length === 0 && <tr><td colSpan="9" className="py-8 text-center text-gray-500">Aucun contact</td></tr>}
                                     {contacts.map(contact => (
                                         <tr key={contact.id} className="hover:bg-gray-50">
                                             <td className="py-4 px-4"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-bgfi-primary/10 rounded-full flex items-center justify-center text-bgfi-primary font-semibold">{(contact.name || '?').split(' ').map(n => n[0]).join('').substring(0,2)}</div><div><span className="font-medium text-gray-900 block">{contact.name || '-'}</span><span className="text-xs text-gray-500">{contact.email || ''}</span></div></div></td>
                                             <td className="py-4 px-4 text-sm text-gray-600">{contact.phone}</td>
                                             <td className="py-4 px-4 text-sm text-gray-600">{contact.city || '-'}</td>
+                                            <td className="py-4 px-4 text-sm text-gray-600">{contact.ageRange || '-'}</td>
                                             <td className="py-4 px-4"><Badge variant={categoryVariant[contact.category] || 'default'}>{categoryMap[contact.category] || contact.category}</Badge></td>
                                             <td className="py-4 px-4 text-sm text-gray-600">{accountTypeMap[contact.accountType] || contact.accountType || '-'}</td>
                                             <td className="py-4 px-4"><div className="flex items-center gap-2"><div className="w-16 bg-gray-200 rounded-full h-2"><div className="h-2 rounded-full" style={{width: (contact.engagementScore || 0) + '%', backgroundColor: (contact.engagementScore || 0) >= 70 ? '#16a34a' : (contact.engagementScore || 0) >= 40 ? '#f59e0b' : '#ef4444'}} /></div><span className="text-xs text-gray-500">{contact.engagementScore || 0}</span></div></td>
                                             <td className="py-4 px-4"><Badge variant={contact.optedIn ? 'success' : 'danger'}>{contact.optedIn ? 'Oui' : 'Non'}</Badge></td>
-                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDelete(contact.id)} /></div></td>
+                                            <td className="py-4 px-4 text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="sm" icon={Icons.Edit} onClick={() => openEditContact(contact)} /><Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDelete(contact.id)} /></div></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1189,6 +1223,43 @@
                                 </div>
                                 <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                                     <Button variant="secondary" onClick={() => setShowImportModal(false)}>Fermer</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {editContact && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-auto">
+                                <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                                    <h2 className="text-xl font-semibold text-gray-900">Modifier le Contact</h2>
+                                    <button onClick={() => setEditContact(null)} className="text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3 mb-2">
+                                        <div className="w-10 h-10 bg-bgfi-primary/10 rounded-full flex items-center justify-center text-bgfi-primary font-semibold">{(editContact.name || '?').split(' ').map(n => n[0]).join('').substring(0,2)}</div>
+                                        <div><span className="font-medium text-gray-900 block">{editContact.phone}</span><span className="text-xs text-gray-500">ID: {editContact.id.substring(0,8)}...</span></div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Nom" value={editForm.name} onChange={v => setEditForm({...editForm, name: v})} />
+                                        <Input label="Email" value={editForm.email} onChange={v => setEditForm({...editForm, email: v})} icon={Icons.Mail} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Select label="Categorie" value={editForm.category} onChange={v => setEditForm({...editForm, category: v})} options={[{ value: 'ACTIVE', label: 'Actif' }, { value: 'INACTIVE', label: 'Inactif' }, { value: 'NEW', label: 'Nouveau' }, { value: 'VIP', label: 'VIP' }, { value: 'PREMIUM', label: 'Premium' }]} />
+                                        <Input label="Ville" value={editForm.city} onChange={v => setEditForm({...editForm, city: v})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Select label="Type de compte" value={editForm.accountType} onChange={v => setEditForm({...editForm, accountType: v})} options={[{ value: '', label: 'Selectionner...' }, { value: 'EPARGNE', label: 'Epargne' }, { value: 'COURANT', label: 'Courant' }, { value: 'PROFESSIONNEL', label: 'Professionnel' }, { value: 'JEUNE', label: 'Jeune' }]} />
+                                        <Select label="Tranche d'age" value={editForm.ageRange} onChange={v => setEditForm({...editForm, ageRange: v})} options={[{ value: '', label: 'Selectionner...' }, { value: '18-25', label: '18-25 ans' }, { value: '26-35', label: '26-35 ans' }, { value: '36-45', label: '36-45 ans' }, { value: '46-55', label: '46-55 ans' }, { value: '56+', label: '56+ ans' }]} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Select label="Genre" value={editForm.gender} onChange={v => setEditForm({...editForm, gender: v})} options={[{ value: '', label: 'Selectionner...' }, { value: 'M', label: 'Masculin' }, { value: 'F', label: 'Feminin' }, { value: 'AUTRE', label: 'Autre' }]} />
+                                        <Input label="Score engagement" type="number" value={editForm.engagementScore} onChange={v => setEditForm({...editForm, engagementScore: v})} />
+                                    </div>
+                                </div>
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setEditContact(null)}>Annuler</Button>
+                                    <Button onClick={handleEditContact} disabled={saving} icon={Icons.CheckCircle}>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</Button>
                                 </div>
                             </div>
                         </div>
