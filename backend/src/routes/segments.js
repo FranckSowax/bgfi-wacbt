@@ -530,18 +530,37 @@ router.get('/:id/search-contacts', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Segment non trouvé' });
     }
 
-    // Find contacts matching search that are NOT already in the segment
+    // Find contacts matching search
+    // For tag-based (STATIC) segments, exclude contacts already tagged
     const tagName = 'seg_' + segment.name.replace(/\s+/g, '_').toLowerCase();
+    const hasTagRule = ((segment.criteria || {}).rules || []).some(r => r.field === 'tags' && r.op === 'has' && r.value === tagName);
+
+    // Build search filter
+    const searchFilter = {
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
+        { email: { contains: q, mode: 'insensitive' } }
+      ]
+    };
+
+    // For tag-based segments, exclude already-tagged contacts
+    // For dynamic segments, exclude contacts matching the criteria
+    let where;
+    if (hasTagRule) {
+      where = {
+        AND: [
+          searchFilter,
+          { NOT: { tags: { has: tagName } } }
+        ]
+      };
+    } else {
+      // Dynamic segment: just search all contacts (can't easily exclude criteria matches client-side)
+      where = searchFilter;
+    }
 
     const contacts = await prisma.contact.findMany({
-      where: {
-        OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { phone: { contains: q } },
-          { email: { contains: q, mode: 'insensitive' } }
-        ],
-        NOT: { tags: { has: tagName } }
-      },
+      where,
       take: 10,
       orderBy: { name: 'asc' },
       select: {
