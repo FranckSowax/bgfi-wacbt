@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "BGFI WhatsApp Marketing SaaS - Full Stack Application",
   "scripts": {
-    "start": "node backend/src/server.js",
+    "start": "node --no-deprecation backend/src/server.js",
     "postinstall": "prisma generate --schema=backend/prisma/schema.prisma",
     "dev": "cd backend && npm run dev",
     "build": "prisma generate --schema=backend/prisma/schema.prisma",
