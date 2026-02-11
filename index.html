@@ -2272,7 +2272,7 @@
                 addSearchTimer.current = setTimeout(async () => {
                     setAddSearching(true);
                     try {
-                        const res = await api(`/segments/${segment.id}/search-contacts?q=${encodeURIComponent(addSearch)}`);
+                        const res = await api(`/contacts?search=${encodeURIComponent(addSearch)}&limit=10`);
                         setAddResults(res.data || []);
                     } catch { setAddResults([]); }
                     finally { setAddSearching(false); }
