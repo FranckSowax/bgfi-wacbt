@@ -459,7 +459,27 @@ router.post('/:id/add-contacts', authenticate, async (req, res) => {
     // Determine the tag for this segment
     const tagName = 'seg_' + segment.name.replace(/\s+/g, '_').toLowerCase();
 
-    // Tag each contact if not already tagged
+    // Check if segment already has non-tag criteria (DYNAMIC segment)
+    const criteria = segment.criteria || { operator: 'AND', rules: [] };
+    const hasTagRule = (criteria.rules || []).some(r => r.field === 'tags' && r.op === 'has' && r.value === tagName);
+    const hasNonTagRules = (criteria.rules || []).some(r => !(r.field === 'tags' && r.op === 'has'));
+
+    // If segment has existing non-tag criteria, tag ALL existing matching contacts first
+    // so they don't lose membership when we switch to tag-based criteria
+    if (!hasTagRule && hasNonTagRules) {
+      const existingContacts = await evaluateContacts(prisma, criteria);
+      for (const existing of existingContacts) {
+        if (!(existing.tags || []).includes(tagName)) {
+          await prisma.contact.update({
+            where: { id: existing.id },
+            data: { tags: { push: tagName } }
+          });
+        }
+      }
+      logger.info('Tagged existing segment contacts', { segmentId: id, count: existingContacts.length });
+    }
+
+    // Tag each new contact if not already tagged
     let tagged = 0;
     for (const contactId of contactIds) {
       const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { id: true, tags: true } });
@@ -472,20 +492,15 @@ router.post('/:id/add-contacts', authenticate, async (req, res) => {
       }
     }
 
-    // Ensure segment criteria includes this tag (for tag-based segments)
-    const criteria = segment.criteria || { operator: 'AND', rules: [] };
-    const hasTagRule = (criteria.rules || []).some(r => r.field === 'tags' && r.op === 'has' && r.value === tagName);
-    if (!hasTagRule) {
-      criteria.rules = criteria.rules || [];
-      criteria.rules.push({ field: 'tags', op: 'has', value: tagName });
-      await prisma.segment.update({
-        where: { id },
-        data: { criteria, type: 'STATIC' }
-      });
-    }
+    // Replace criteria with tag-only rule (all members are now tagged)
+    const newCriteria = { operator: 'AND', rules: [{ field: 'tags', op: 'has', value: tagName }] };
+    await prisma.segment.update({
+      where: { id },
+      data: { criteria: newCriteria, type: 'STATIC' }
+    });
 
     // Re-evaluate count
-    const contactCount = await evaluateCount(prisma, criteria);
+    const contactCount = await evaluateCount(prisma, newCriteria);
     await prisma.segment.update({
       where: { id },
       data: { contactCount, lastEvaluatedAt: new Date() }
