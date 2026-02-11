@@ -221,12 +221,13 @@ class CampaignService {
    * Envoi direct sans queue (mode serverless)
    */
   async processDirectSend(campaign, batches) {
+    let totalSent = 0;
+    let totalFailed = 0;
+
     for (const batch of batches) {
       try {
         // Send each message individually to track per-contact results
         for (const contact of batch) {
-          let result;
-
           // Use WhatsApp template for broadcast (required to initiate conversations)
           const templateName = campaign.template.name;
           const language = campaign.template.language || 'fr';
@@ -235,9 +236,20 @@ class CampaignService {
             ? [{ type: 'body', parameters: components }]
             : [];
 
-          result = await whatsappService.sendTemplate(contact.phone, templateName, language, bodyParams);
+          logger.info('Sending template', {
+            campaignId: campaign.id,
+            template: templateName,
+            language,
+            hasParams: bodyParams.length > 0,
+            contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*')
+          });
+
+          const result = await whatsappService.sendTemplate(contact.phone, templateName, language, bodyParams);
 
           const newStatus = result.success ? 'SENT' : 'FAILED';
+          if (result.success) totalSent++;
+          else totalFailed++;
+
           await prisma.message.updateMany({
             where: { campaignId: campaign.id, contactId: contact.id },
             data: {
@@ -247,29 +259,35 @@ class CampaignService {
               error: result.error || null
             }
           });
+
+          if (!result.success) {
+            logger.warn('Template send failed at API level', {
+              campaignId: campaign.id,
+              contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*'),
+              error: result.error
+            });
+          }
         }
 
-        // Update aggregate campaign stats
-        const msgStats = await prisma.message.groupBy({
-          by: ['status'],
-          where: { campaignId: campaign.id },
-          _count: { status: true }
-        });
-        const sent = msgStats.find(s => s.status === 'SENT')?._count.status || 0;
-        const failed = msgStats.find(s => s.status === 'FAILED')?._count.status || 0;
-        const delivered = sent;
-
-        await prisma.campaign.update({
-          where: { id: campaign.id },
-          data: { sent: sent + failed, delivered, failed }
-        });
-
-        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'sent' }, sent);
-        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'failed' }, failed);
+        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'sent' }, totalSent);
+        campaignMessagesSent.inc({ campaign_type: campaign.template.category || 'MARKETING', status: 'failed' }, totalFailed);
       } catch (error) {
         logger.error('Erreur batch direct', { campaignId: campaign.id, error: error.message });
       }
     }
+
+    // Update campaign sent count (only API-level sent count, not delivery)
+    // Delivery/failure stats are updated by webhook handler to avoid race conditions
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { sent: totalSent + totalFailed }
+    });
+
+    logger.info('Campaign direct send completed', {
+      campaignId: campaign.id,
+      sent: totalSent,
+      failed: totalFailed
+    });
 
     // Mark campaign as completed
     const total = await prisma.message.count({ where: { campaignId: campaign.id } });

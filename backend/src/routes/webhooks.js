@@ -172,6 +172,15 @@ async function handleStatusUpdate(status) {
     const externalId = status.id;
     const waStatus = status.status;
 
+    // Log complet du statut recu de Meta (essentiel pour debug)
+    logger.info('WhatsApp status webhook received', {
+      externalId,
+      status: waStatus,
+      recipientId: status.recipient_id,
+      timestamp: status.timestamp,
+      errors: status.errors || null
+    });
+
     const statusMap = {
       'sent': 'SENT',
       'delivered': 'DELIVERED',
@@ -186,14 +195,30 @@ async function handleStatusUpdate(status) {
       where: { externalId }
     });
 
-    if (!dbMessage) return;
+    if (!dbMessage) {
+      logger.warn('Message not found for status update', { externalId, status: waStatus });
+      return;
+    }
+
+    // Protection progression de statut : ne pas regresser (ex: DELIVERED → SENT)
+    const statusOrder = { PENDING: 0, QUEUED: 1, SENT: 2, DELIVERED: 3, READ: 4, FAILED: 5 };
+    if (statusOrder[dbStatus] <= statusOrder[dbMessage.status] && dbStatus !== 'FAILED') {
+      logger.info('Status update skipped (not a progression)', { externalId, current: dbMessage.status, received: dbStatus });
+      return;
+    }
 
     const updateData = { status: dbStatus };
     if (dbStatus === 'DELIVERED') updateData.deliveredAt = new Date();
     if (dbStatus === 'READ') updateData.readAt = new Date();
     if (dbStatus === 'FAILED') {
       updateData.failedAt = new Date();
-      updateData.error = status.errors?.[0]?.message || 'Unknown error';
+      // Capture complete des erreurs Meta (message, title, error_data.details)
+      const errorInfo = status.errors?.[0];
+      const errorMsg = errorInfo?.message || errorInfo?.title || 'Unknown error';
+      const errorDetails = errorInfo?.error_data?.details;
+      const errorCode = errorInfo?.code;
+      updateData.error = errorDetails ? `[${errorCode}] ${errorMsg}: ${errorDetails}` : errorCode ? `[${errorCode}] ${errorMsg}` : errorMsg;
+      logger.warn('Message delivery FAILED', { externalId, error: updateData.error, errorFull: errorInfo });
     }
 
     await prisma.message.update({
@@ -201,7 +226,7 @@ async function handleStatusUpdate(status) {
       data: updateData
     });
 
-    // Mettre à jour les statistiques de la campagne
+    // Mettre a jour les statistiques de la campagne (increments uniquement)
     if (dbMessage.campaignId) {
       const campaignUpdate = {};
       if (dbStatus === 'DELIVERED') campaignUpdate.delivered = { increment: 1 };
@@ -216,9 +241,9 @@ async function handleStatusUpdate(status) {
       }
     }
 
-    logger.info('Message status updated', { externalId, status: dbStatus });
+    logger.info('Message status updated', { externalId, status: dbStatus, messageId: dbMessage.id });
   } catch (error) {
-    logger.error('Error updating message status', { error: error.message });
+    logger.error('Error updating message status', { error: error.message, stack: error.stack });
   }
 }
 
