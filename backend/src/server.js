@@ -51,8 +51,25 @@ app.use(express.static(rootDir, {
   extensions: ['html']
 }));
 
-// Health check
-app.get('/api/health', async (req, res) => {
+// Health check (lightweight - no DB connection to avoid Railway SIGTERM)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: 'railway',
+    version: '1.0.0',
+    uptime: Math.floor(process.uptime()),
+    services: {
+      whatsapp: !!process.env.WHATSAPP_ACCESS_TOKEN,
+      openai: !!process.env.OPENAI_API_KEY,
+      supabase: !!process.env.SUPABASE_URL,
+      chatbot: process.env.CHATBOT_AUTO_REPLY !== 'false' && !!process.env.OPENAI_API_KEY
+    }
+  });
+});
+
+// Deep health check (with DB - for manual diagnostics only)
+app.get('/api/health/deep', async (req, res) => {
   let dbStatus = 'unknown';
   try {
     const { PrismaClient } = require('@prisma/client');
@@ -63,20 +80,7 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     dbStatus = 'error: ' + e.message;
   }
-
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: 'railway',
-    version: '1.0.0',
-    services: {
-      database: dbStatus,
-      whatsapp: !!process.env.WHATSAPP_ACCESS_TOKEN,
-      openai: !!process.env.OPENAI_API_KEY,
-      supabase: !!process.env.SUPABASE_URL,
-      chatbot: process.env.CHATBOT_AUTO_REPLY !== 'false' && !!process.env.OPENAI_API_KEY
-    }
-  });
+  res.json({ status: 'ok', database: dbStatus, timestamp: new Date().toISOString() });
 });
 
 // API Routes
