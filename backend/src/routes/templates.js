@@ -87,6 +87,41 @@ router.get('/meta/app-info', authenticate, async (req, res) => {
 });
 
 // ============================================
+// POST /api/templates/meta/test-upload - Tester l'upload media vers Meta
+// ============================================
+router.post('/meta/test-upload', authenticate, async (req, res) => {
+  try {
+    const { imagePath } = req.body;
+    const fs = require('fs');
+    const testPath = imagePath || 'templates/bgfi-welcome.jpeg';
+    const localPath = path.resolve(__dirname, '../../../public', testPath.replace(/^\//, ''));
+
+    const diagnostics = {
+      appId: process.env.WHATSAPP_APP_ID || null,
+      resolvedPath: localPath,
+      fileExists: fs.existsSync(localPath),
+      fileSize: null,
+      uploadResult: null
+    };
+
+    if (diagnostics.fileExists) {
+      const stats = fs.statSync(localPath);
+      diagnostics.fileSize = stats.size;
+
+      // Try the actual upload
+      const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, 'image/jpeg');
+      diagnostics.uploadResult = uploadResult;
+    }
+
+    res.json(diagnostics);
+  } catch (error) {
+    const errMsg = error.response?.data?.error?.message || error.message;
+    logger.error('Error testing media upload', { error: errMsg });
+    res.status(500).json({ error: errMsg });
+  }
+});
+
+// ============================================
 // GET /api/templates/:id - Détail d'un template
 // ============================================
 router.get('/:id', authenticate, async (req, res) => {
