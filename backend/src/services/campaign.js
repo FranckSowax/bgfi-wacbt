@@ -231,20 +231,17 @@ class CampaignService {
           // Use WhatsApp template for broadcast (required to initiate conversations)
           const templateName = campaign.template.name;
           const language = campaign.template.language || 'fr';
-          const components = this.extractVariables(campaign.template.content, contact, campaign.variables);
-          const bodyParams = components.length > 0
-            ? [{ type: 'body', parameters: components }]
-            : [];
+          const sendComponents = this.buildSendComponents(campaign.template, contact, campaign.variables);
 
           logger.info('Sending template', {
             campaignId: campaign.id,
             template: templateName,
             language,
-            hasParams: bodyParams.length > 0,
+            components: sendComponents.map(c => c.type),
             contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*')
           });
 
-          const result = await whatsappService.sendTemplate(contact.phone, templateName, language, bodyParams);
+          const result = await whatsappService.sendTemplate(contact.phone, templateName, language, sendComponents);
 
           const newStatus = result.success ? 'SENT' : 'FAILED';
           if (result.success) totalSent++;
@@ -415,6 +412,57 @@ class CampaignService {
       }
       return { type: 'text', text: value };
     });
+  }
+
+  /**
+   * Build the full components array for sending a template (HEADER + BODY + BUTTONS)
+   */
+  buildSendComponents(template, contact, variables) {
+    const components = [];
+
+    // HEADER component (image/video/document)
+    if (template.headerType && template.headerType !== 'NONE' && template.headerType !== 'TEXT') {
+      const headerImageUrl = template.headerContent;
+      if (headerImageUrl) {
+        // Build full public URL if relative path
+        let imageUrl = headerImageUrl;
+        if (!imageUrl.startsWith('http')) {
+          const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+            ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+            : process.env.BASE_URL || 'https://bgfi-wacbt-production.up.railway.app';
+          imageUrl = `${baseUrl}/${headerImageUrl.replace(/^\//, '')}`;
+        }
+        components.push({
+          type: 'header',
+          parameters: [{
+            type: 'image',
+            image: { link: imageUrl }
+          }]
+        });
+      }
+    }
+
+    // BODY component (text variables)
+    const bodyParams = this.extractVariables(template.content, contact, variables);
+    if (bodyParams.length > 0) {
+      components.push({ type: 'body', parameters: bodyParams });
+    }
+
+    // BUTTON components (dynamic URL suffix)
+    if (template.buttons && Array.isArray(template.buttons)) {
+      template.buttons.forEach((btn, index) => {
+        if (btn.type === 'URL' && btn.url && btn.url.includes('{{1}}')) {
+          components.push({
+            type: 'button',
+            sub_type: 'url',
+            index: index,
+            parameters: [{ type: 'text', text: variables?.buttonUrl || '' }]
+          });
+        }
+      });
+    }
+
+    return components;
   }
 }
 

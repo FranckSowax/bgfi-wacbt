@@ -107,6 +107,30 @@ async function handleIncomingMessage(message, contacts) {
       });
     }
 
+    // Gestion opt-out : STOP / ARRET / DESINSCRIRE
+    if (message.type === 'text' && message.text?.body) {
+      const textLower = message.text.body.trim().toLowerCase();
+      if (['stop', 'arret', 'arreter', 'desinscrire', 'unsubscribe'].includes(textLower)) {
+        await prisma.contact.update({
+          where: { id: dbContact.id },
+          data: { status: 'UNSUBSCRIBED', optedIn: false }
+        });
+        await whatsappService.sendMessage(phone, 'Vous avez ete desinscrit de nos communications. Pour vous reinscrire, envoyez START.').catch(() => {});
+        logger.info('Contact opted out', { contactId: dbContact.id, phone: phone.replace(/\d(?=\d{4})/g, '*') });
+        return;
+      }
+      // Gestion opt-in : START
+      if (['start', 'ok', 'inscrire'].includes(textLower) && dbContact.status === 'UNSUBSCRIBED') {
+        await prisma.contact.update({
+          where: { id: dbContact.id },
+          data: { status: 'ACTIVE', optedIn: true, optedInAt: new Date() }
+        });
+        await whatsappService.sendMessage(phone, 'Vous etes de nouveau inscrit a nos communications BGFI Bank. Bienvenue !').catch(() => {});
+        logger.info('Contact opted back in', { contactId: dbContact.id });
+        return;
+      }
+    }
+
     // Chatbot automatique : repond a tous les messages texte entrants via RAG
     if (message.type === 'text' && message.text?.body) {
       const text = message.text.body;

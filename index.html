@@ -2887,7 +2887,7 @@
         const TemplatesView = () => {
             const [showCreateModal, setShowCreateModal] = useState(false);
             const { data, loading, error, refetch } = useApi('/templates?limit=50');
-            const [form, setForm] = useState({ name: '', displayName: '', category: '', content: '', language: 'fr' });
+            const [form, setForm] = useState({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '' });
             const [creating, setCreating] = useState(false);
 
             const templates = data?.data || [];
@@ -2895,8 +2895,9 @@
             const handleCreate = async () => {
                 setCreating(true);
                 try {
-                    await api('/templates', { method: 'POST', body: JSON.stringify(form) });
-                    setShowCreateModal(false); setForm({ name: '', displayName: '', category: '', content: '', language: 'fr' }); refetch();
+                    const payload = { ...form, buttons: form.buttons.length > 0 ? form.buttons : undefined, footer: form.footer || undefined };
+                    await api('/templates', { method: 'POST', body: JSON.stringify(payload) });
+                    setShowCreateModal(false); setForm({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '' }); refetch();
                 } catch (err) { alert(err.message); }
                 finally { setCreating(false); }
             };
@@ -2919,7 +2920,7 @@
             };
 
             const [dupModal, setDupModal] = useState(null);
-            const [dupForm, setDupForm] = useState({ name: '', displayName: '', category: '', content: '' });
+            const [dupForm, setDupForm] = useState({ name: '', displayName: '', category: '', content: '', headerType: 'NONE', headerContent: '', buttons: [], footer: '' });
             const [duplicating, setDuplicating] = useState(false);
 
             const openDuplicate = (template) => {
@@ -2927,7 +2928,11 @@
                     name: template.name + '_v2',
                     displayName: (template.displayName || template.name) + ' (v2)',
                     category: template.category,
-                    content: template.content
+                    content: template.content,
+                    headerType: template.headerType || 'NONE',
+                    headerContent: template.headerContent || '',
+                    buttons: template.buttons || [],
+                    footer: template.footer || ''
                 });
                 setDupModal(template);
             };
@@ -2935,7 +2940,8 @@
             const handleDuplicate = async () => {
                 setDuplicating(true);
                 try {
-                    await api('/templates/' + dupModal.id + '/duplicate', { method: 'POST', body: JSON.stringify(dupForm) });
+                    const payload = { ...dupForm, buttons: (dupForm.buttons || []).length > 0 ? dupForm.buttons : undefined, footer: dupForm.footer || undefined };
+                    await api('/templates/' + dupModal.id + '/duplicate', { method: 'POST', body: JSON.stringify(payload) });
                     setDupModal(null); refetch();
                 } catch (err) { alert(err.message); }
                 finally { setDuplicating(false); }
@@ -2965,7 +2971,19 @@
                                     </div>
                                     <Badge variant={tplStatusVariant[template.status] || 'default'}>{tplStatusMap[template.status] || template.status}</Badge>
                                 </div>
+                                {template.headerType && template.headerType !== 'NONE' && (
+                                    <div className="mb-3">
+                                        {template.headerType === 'IMAGE' && template.headerContent && (
+                                            <div className="rounded-lg overflow-hidden border border-gray-200 mb-2"><img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="Header" className="w-full h-32 object-cover" onError={e => e.target.style.display='none'} /></div>
+                                        )}
+                                        <Badge variant="info">{template.headerType === 'IMAGE' ? 'Image' : template.headerType === 'VIDEO' ? 'Video' : 'En-tete texte'}</Badge>
+                                    </div>
+                                )}
                                 <div className="bg-gray-50 p-4 rounded-xl mb-4"><p className="text-sm text-gray-700 whitespace-pre-line">{template.content}</p></div>
+                                {template.footer && <p className="text-xs text-gray-400 mb-2 italic">{template.footer}</p>}
+                                {template.buttons && template.buttons.length > 0 && (
+                                    <div className="mb-3 flex gap-1 flex-wrap">{template.buttons.map((b, i) => <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">{b.type === 'URL' ? 'URL: ' : b.type === 'PHONE_NUMBER' ? 'Tel: ' : ''}{b.text}</span>)}</div>
+                                )}
                                 {template.variables && template.variables.length > 0 && <div className="mb-4 flex gap-1 flex-wrap">{template.variables.map((v, i) => <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{'{{'}{v}{'}}'}</span>)}</div>}
                                 <div className="flex gap-2">
                                     <Button variant="ghost" size="sm" icon={Icons.Copy} onClick={() => openDuplicate(template)} title="Dupliquer" />
@@ -2988,12 +3006,51 @@
                                         <Input label="Nom d'affichage" placeholder="Relance Connexion" value={form.displayName} onChange={v => setForm({...form, displayName: v})} />
                                     </div>
                                     <Select label="Categorie" value={form.category} onChange={v => setForm({...form, category: v})} options={[{ value: '', label: 'Selectionner...' }, { value: 'MARKETING', label: 'Marketing' }, { value: 'UTILITY', label: 'Utilitaire' }, { value: 'AUTHENTICATION', label: 'Authentification' }]} />
+
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">En-tete (Header)</label>
+                                        <div className="flex gap-2 mb-2">
+                                            {['NONE', 'IMAGE', 'TEXT'].map(ht => (
+                                                <button key={ht} className={'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ' + (form.headerType === ht ? 'bg-bgfi-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')} onClick={() => setForm({...form, headerType: ht, headerContent: ht === 'NONE' ? '' : form.headerContent})}>
+                                                    {ht === 'NONE' ? 'Aucun' : ht === 'IMAGE' ? 'Image' : 'Texte'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {form.headerType === 'IMAGE' && (
+                                            <div>
+                                                <Input label="URL ou chemin de l'image" placeholder="templates/bgfi-welcome.jpeg" value={form.headerContent} onChange={v => setForm({...form, headerContent: v})} />
+                                                <p className="text-xs text-gray-500 mt-1">Chemin relatif dans /public (ex: templates/bgfi-welcome.jpeg) ou URL publique complète.</p>
+                                                {form.headerContent && <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 max-w-xs"><img src={form.headerContent.startsWith('http') ? form.headerContent : '/' + form.headerContent} alt="Preview" className="w-full h-auto" onError={e => e.target.style.display='none'} /></div>}
+                                            </div>
+                                        )}
+                                        {form.headerType === 'TEXT' && (
+                                            <Input label="Texte de l'en-tete" placeholder="Bienvenue chez BGFI Bank" value={form.headerContent} onChange={v => setForm({...form, headerContent: v})} />
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message (Body)</label>
                                         <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" placeholder="Bonjour {{1}} ! ..." value={form.content} onChange={(e) => setForm({...form, content: e.target.value})} />
                                         <p className="text-xs text-gray-500 mt-2">Utilisez {'{{1}}'}, {'{{2}}'}, etc. pour les variables.</p>
                                     </div>
-                                    <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Note :</strong> Les templates doivent etre approuves par Meta avant utilisation (24-48h).</p></div>
+
+                                    <Input label="Pied de page (Footer) - optionnel" placeholder="BGFI Bank - Votre partenaire pour l'avenir" value={form.footer} onChange={v => setForm({...form, footer: v})} />
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Boutons (optionnel)</label>
+                                        {form.buttons.map((btn, i) => (
+                                            <div key={i} className="flex gap-2 mb-2 items-end">
+                                                <Select label={i === 0 ? 'Type' : ''} value={btn.type} onChange={v => { const nb = [...form.buttons]; nb[i] = {...nb[i], type: v}; setForm({...form, buttons: nb}); }} options={[{ value: 'URL', label: 'Lien URL' }, { value: 'PHONE_NUMBER', label: 'Telephone' }, { value: 'QUICK_REPLY', label: 'Reponse rapide' }]} />
+                                                <Input label={i === 0 ? 'Texte du bouton' : ''} placeholder="Decouvrir" value={btn.text} onChange={v => { const nb = [...form.buttons]; nb[i] = {...nb[i], text: v}; setForm({...form, buttons: nb}); }} />
+                                                {btn.type === 'URL' && <Input label={i === 0 ? 'URL' : ''} placeholder="https://example.com" value={btn.url || ''} onChange={v => { const nb = [...form.buttons]; nb[i] = {...nb[i], url: v}; setForm({...form, buttons: nb}); }} />}
+                                                {btn.type === 'PHONE_NUMBER' && <Input label={i === 0 ? 'Telephone' : ''} placeholder="+24107488716" value={btn.phone || ''} onChange={v => { const nb = [...form.buttons]; nb[i] = {...nb[i], phone: v}; setForm({...form, buttons: nb}); }} />}
+                                                <button className="text-red-500 hover:text-red-700 p-2 mb-0.5" onClick={() => setForm({...form, buttons: form.buttons.filter((_, j) => j !== i)})}><Icons.Trash2 /></button>
+                                            </div>
+                                        ))}
+                                        {form.buttons.length < 3 && <Button variant="secondary" size="sm" icon={Icons.Plus} onClick={() => setForm({...form, buttons: [...form.buttons, { type: 'URL', text: '', url: '' }]})}>Ajouter un bouton</Button>}
+                                    </div>
+
+                                    <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Note :</strong> Les templates doivent etre approuves par Meta avant utilisation (24-48h). L'image est declaree au template, mais l'URL reelle est envoyee a chaque campagne.</p></div>
                                 </div>
                                 <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                                     <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Annuler</Button>
@@ -3017,11 +3074,48 @@
                                         <Input label="Nom d'affichage" placeholder="Relance V2" value={dupForm.displayName} onChange={v => setDupForm({...dupForm, displayName: v})} />
                                     </div>
                                     <Select label="Categorie" value={dupForm.category} onChange={v => setDupForm({...dupForm, category: v})} options={[{ value: 'MARKETING', label: 'Marketing' }, { value: 'UTILITY', label: 'Utilitaire' }, { value: 'AUTHENTICATION', label: 'Authentification' }]} />
+
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">En-tete (Header)</label>
+                                        <div className="flex gap-2 mb-2">
+                                            {['NONE', 'IMAGE', 'TEXT'].map(ht => (
+                                                <button key={ht} className={'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ' + (dupForm.headerType === ht ? 'bg-bgfi-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')} onClick={() => setDupForm({...dupForm, headerType: ht, headerContent: ht === 'NONE' ? '' : dupForm.headerContent})}>
+                                                    {ht === 'NONE' ? 'Aucun' : ht === 'IMAGE' ? 'Image' : 'Texte'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {dupForm.headerType === 'IMAGE' && (
+                                            <div>
+                                                <Input label="URL ou chemin de l'image" placeholder="templates/bgfi-welcome.jpeg" value={dupForm.headerContent} onChange={v => setDupForm({...dupForm, headerContent: v})} />
+                                                <p className="text-xs text-gray-500 mt-1">Chemin relatif dans /public ou URL publique.</p>
+                                                {dupForm.headerContent && <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 max-w-xs"><img src={dupForm.headerContent.startsWith('http') ? dupForm.headerContent : '/' + dupForm.headerContent} alt="Preview" className="w-full h-auto" onError={e => e.target.style.display='none'} /></div>}
+                                            </div>
+                                        )}
+                                        {dupForm.headerType === 'TEXT' && <Input label="Texte de l'en-tete" value={dupForm.headerContent} onChange={v => setDupForm({...dupForm, headerContent: v})} />}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message (Body)</label>
                                         <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" value={dupForm.content} onChange={(e) => setDupForm({...dupForm, content: e.target.value})} />
                                         <p className="text-xs text-gray-500 mt-2">Modifiez le contenu puis soumettez. Utilisez {'{{1}}'}, {'{{2}}'}, etc. pour les variables.</p>
                                     </div>
+
+                                    <Input label="Pied de page (Footer) - optionnel" value={dupForm.footer} onChange={v => setDupForm({...dupForm, footer: v})} />
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Boutons (optionnel)</label>
+                                        {(dupForm.buttons || []).map((btn, i) => (
+                                            <div key={i} className="flex gap-2 mb-2 items-end">
+                                                <Select label={i === 0 ? 'Type' : ''} value={btn.type} onChange={v => { const nb = [...dupForm.buttons]; nb[i] = {...nb[i], type: v}; setDupForm({...dupForm, buttons: nb}); }} options={[{ value: 'URL', label: 'Lien URL' }, { value: 'PHONE_NUMBER', label: 'Telephone' }, { value: 'QUICK_REPLY', label: 'Reponse rapide' }]} />
+                                                <Input label={i === 0 ? 'Texte' : ''} placeholder="Decouvrir" value={btn.text} onChange={v => { const nb = [...dupForm.buttons]; nb[i] = {...nb[i], text: v}; setDupForm({...dupForm, buttons: nb}); }} />
+                                                {btn.type === 'URL' && <Input label={i === 0 ? 'URL' : ''} placeholder="https://example.com" value={btn.url || ''} onChange={v => { const nb = [...dupForm.buttons]; nb[i] = {...nb[i], url: v}; setDupForm({...dupForm, buttons: nb}); }} />}
+                                                {btn.type === 'PHONE_NUMBER' && <Input label={i === 0 ? 'Tel.' : ''} placeholder="+24107488716" value={btn.phone || ''} onChange={v => { const nb = [...dupForm.buttons]; nb[i] = {...nb[i], phone: v}; setDupForm({...dupForm, buttons: nb}); }} />}
+                                                <button className="text-red-500 hover:text-red-700 p-2 mb-0.5" onClick={() => setDupForm({...dupForm, buttons: dupForm.buttons.filter((_, j) => j !== i)})}><Icons.Trash2 /></button>
+                                            </div>
+                                        ))}
+                                        {(dupForm.buttons || []).length < 3 && <Button variant="secondary" size="sm" icon={Icons.Plus} onClick={() => setDupForm({...dupForm, buttons: [...(dupForm.buttons || []), { type: 'URL', text: '', url: '' }]})}>Ajouter un bouton</Button>}
+                                    </div>
+
                                     <div className="bg-blue-50 p-4 rounded-xl"><p className="text-sm text-blue-800"><strong>Note :</strong> Le nouveau template sera soumis a Meta pour approbation (24-48h).</p></div>
                                 </div>
                                 <div className="p-6 border-t border-gray-200 flex justify-end gap-3">

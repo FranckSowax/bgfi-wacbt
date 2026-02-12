@@ -1,5 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const fs = require('fs');
 const logger = require('../utils/logger');
 
 const GRAPH_API_VERSION = 'v21.0';
@@ -124,8 +125,57 @@ class WhatsAppCloudService {
   }
 
   /**
+   * Uploader un media sur Meta (Resumable Upload API) pour obtenir un header_handle
+   * Requis pour creer des templates avec image/video/document en header
+   */
+  async uploadMediaForTemplate(filePath, mimeType = 'image/jpeg') {
+    try {
+      const appId = process.env.WHATSAPP_APP_ID;
+      if (!appId) {
+        return { success: false, error: 'WHATSAPP_APP_ID non configuré' };
+      }
+
+      const fileData = fs.readFileSync(filePath);
+      const fileLength = fileData.length;
+
+      // Step 1: Create upload session
+      const sessionRes = await this.client.post(`/${appId}/uploads`, null, {
+        params: {
+          file_length: fileLength,
+          file_type: mimeType,
+          access_token: this.accessToken
+        }
+      });
+      const uploadSessionId = sessionRes.data.id;
+
+      // Step 2: Upload file data
+      const uploadRes = await axios.post(
+        `${GRAPH_API_BASE}/${uploadSessionId}`,
+        fileData,
+        {
+          headers: {
+            'Authorization': `OAuth ${this.accessToken}`,
+            'Content-Type': 'application/octet-stream',
+            'file_offset': '0'
+          },
+          timeout: 60000
+        }
+      );
+
+      const headerHandle = uploadRes.data.h;
+      logger.info('Media uploaded for template', { headerHandle: headerHandle?.substring(0, 20) + '...' });
+
+      return { success: true, headerHandle };
+    } catch (error) {
+      const errMsg = error.response?.data?.error?.message || error.message;
+      logger.error('Erreur upload media pour template', { error: errMsg });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
    * Créer un template WhatsApp via l'API Graph
-   * Nécessite WHATSAPP_BUSINESS_ACCOUNT_ID
+   * Supporte HEADER (TEXT/IMAGE/VIDEO/DOCUMENT), BODY, FOOTER, BUTTONS
    */
   async createTemplate(data) {
     try {
@@ -134,17 +184,63 @@ class WhatsAppCloudService {
         return { success: false, error: 'WHATSAPP_BUSINESS_ACCOUNT_ID non configuré' };
       }
 
+      // Build components array
+      const components = [];
+
+      // HEADER component
+      if (data.headerType && data.headerType !== 'NONE') {
+        const header = { type: 'HEADER', format: data.headerType };
+        if (data.headerType === 'TEXT') {
+          header.text = data.headerContent || '';
+        } else if (data.headerHandle) {
+          // IMAGE/VIDEO/DOCUMENT: use uploaded media handle
+          header.example = { header_handle: [data.headerHandle] };
+        }
+        components.push(header);
+      }
+
+      // BODY component (required)
+      const body = { type: 'BODY', text: data.content };
+      const bodyVars = data.content.match(/\{\{(\d+)\}\}/g);
+      if (bodyVars) {
+        body.example = { body_text: [bodyVars.map(() => 'exemple')] };
+      }
+      components.push(body);
+
+      // FOOTER component
+      if (data.footer) {
+        components.push({ type: 'FOOTER', text: data.footer });
+      }
+
+      // BUTTONS component
+      if (data.buttons && data.buttons.length > 0) {
+        components.push({
+          type: 'BUTTONS',
+          buttons: data.buttons.map(btn => {
+            if (btn.type === 'URL') {
+              const buttonDef = { type: 'URL', text: btn.text, url: btn.url };
+              // Dynamic URL suffix
+              if (btn.url.includes('{{1}}')) {
+                buttonDef.example = [btn.url.replace('{{1}}', 'example')];
+              }
+              return buttonDef;
+            }
+            if (btn.type === 'PHONE_NUMBER') {
+              return { type: 'PHONE_NUMBER', text: btn.text, phone_number: btn.phone };
+            }
+            return { type: 'QUICK_REPLY', text: btn.text };
+          })
+        });
+      }
+
       const payload = {
         name: data.name,
         language: data.language || 'fr',
         category: (data.category || 'MARKETING').toUpperCase(),
-        components: [
-          {
-            type: 'BODY',
-            text: data.content
-          }
-        ]
+        components
       };
+
+      logger.info('Creating template on Meta', { name: data.name, components: components.map(c => c.type) });
 
       const response = await this.client.post(`/${wabaId}/message_templates`, payload);
 
@@ -155,7 +251,7 @@ class WhatsAppCloudService {
       };
     } catch (error) {
       const errMsg = error.response?.data?.error?.message || error.message;
-      logger.error('Erreur création template', { error: errMsg });
+      logger.error('Erreur création template', { error: errMsg, details: error.response?.data });
       return { success: false, error: errMsg };
     }
   }

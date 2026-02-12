@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 
 const { authenticate, authorize } = require('../middleware/auth');
@@ -90,10 +91,11 @@ router.get('/:id', authenticate, async (req, res) => {
 
 // ============================================
 // POST /api/templates - Créer un template
+// Supporte HEADER (IMAGE/VIDEO/TEXT), BODY, FOOTER, BUTTONS
 // ============================================
 router.post('/', authenticate, authorize(['template:create']), async (req, res) => {
   try {
-    const { name, displayName, category, content, language = 'fr' } = req.body;
+    const { name, displayName, category, content, language = 'fr', headerType, headerContent, buttons, footer } = req.body;
 
     // Validation
     if (!name || !displayName || !category || !content) {
@@ -107,6 +109,22 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
     const variableMatches = content.match(/\{\{(\d+)\}\}/g) || [];
     const variables = variableMatches.map((_, index) => `var${index + 1}`);
 
+    // Si header IMAGE et image locale, uploader vers Meta pour obtenir le header_handle
+    let headerHandle = null;
+    if (headerType === 'IMAGE' && headerContent) {
+      // Tenter l'upload vers Meta si WHATSAPP_APP_ID est configuré
+      const localPath = path.resolve(__dirname, '../../../public', headerContent.replace(/^\//, ''));
+      const fs = require('fs');
+      if (fs.existsSync(localPath)) {
+        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, 'image/jpeg');
+        if (uploadResult.success) {
+          headerHandle = uploadResult.headerHandle;
+        } else {
+          logger.warn('Media upload failed, template will be created without sample image', { error: uploadResult.error });
+        }
+      }
+    }
+
     // Créer le template dans la base de données
     const template = await prisma.template.create({
       data: {
@@ -116,6 +134,10 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
         content,
         variables,
         language,
+        headerType: headerType || 'NONE',
+        headerContent: headerContent || null,
+        buttons: buttons || null,
+        footer: footer || null,
         status: 'PENDING'
       }
     });
@@ -125,31 +147,35 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
       name: template.name,
       category: template.category.toLowerCase(),
       content,
-      language
+      language,
+      headerType: headerType || 'NONE',
+      headerContent,
+      headerHandle,
+      buttons: buttons || null,
+      footer: footer || null
     });
 
     if (metaResult.success) {
       await prisma.template.update({
         where: { id: template.id },
-        data: {
-          metaId: metaResult.templateId
-        }
+        data: { metaId: metaResult.templateId }
       });
     }
 
     // Métriques
     templatesTotal.inc({ category: template.category, status: template.status });
 
-    logger.info('Template created', { 
-      templateId: template.id, 
+    logger.info('Template created', {
+      templateId: template.id,
       name: template.name,
-      userId: req.user.id 
+      headerType: headerType || 'NONE',
+      userId: req.user.id
     });
 
     res.status(201).json({
       ...template,
       message: 'Template créé et soumis pour approbation Meta. Délai: 24-48h.',
-      metaStatus: metaResult.success ? 'submitted' : 'failed'
+      metaStatus: metaResult.success ? 'submitted' : metaResult.error
     });
   } catch (error) {
     logger.error('Error creating template', { error: error.message });
@@ -214,7 +240,7 @@ router.put('/:id', authenticate, authorize(['template:update']), async (req, res
 router.post('/:id/duplicate', authenticate, authorize(['template:create']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, displayName, content, category } = req.body;
+    const { name, displayName, content, category, headerType, headerContent, buttons, footer } = req.body;
 
     const source = await prisma.template.findUnique({ where: { id } });
     if (!source) {
@@ -225,6 +251,25 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
     const newContent = content || source.content;
     const variableMatches = newContent.match(/\{\{(\d+)\}\}/g) || [];
     const variables = variableMatches.map((_, index) => `var${index + 1}`);
+    const newHeaderType = headerType !== undefined ? headerType : (source.headerType || 'NONE');
+    const newHeaderContent = headerContent !== undefined ? headerContent : source.headerContent;
+    const newButtons = buttons !== undefined ? buttons : source.buttons;
+    const newFooter = footer !== undefined ? footer : source.footer;
+
+    // Upload media header if needed
+    let headerHandle = null;
+    if (newHeaderType === 'IMAGE' && newHeaderContent) {
+      const localPath = path.resolve(__dirname, '../../../public', newHeaderContent.replace(/^\//, ''));
+      const fs = require('fs');
+      if (fs.existsSync(localPath)) {
+        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, 'image/jpeg');
+        if (uploadResult.success) {
+          headerHandle = uploadResult.headerHandle;
+        } else {
+          logger.warn('Media upload failed for duplicate', { error: uploadResult.error });
+        }
+      }
+    }
 
     const template = await prisma.template.create({
       data: {
@@ -234,6 +279,10 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
         content: newContent,
         variables,
         language: source.language,
+        headerType: newHeaderType,
+        headerContent: newHeaderContent,
+        buttons: newButtons,
+        footer: newFooter,
         status: 'PENDING'
       }
     });
@@ -243,7 +292,12 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
       name: template.name,
       category: template.category.toLowerCase(),
       content: newContent,
-      language: template.language
+      language: template.language,
+      headerType: newHeaderType,
+      headerContent: newHeaderContent,
+      headerHandle,
+      buttons: newButtons,
+      footer: newFooter
     });
 
     if (metaResult.success) {
@@ -253,7 +307,7 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
       });
     }
 
-    logger.info('Template duplicated', { sourceId: id, newId: template.id, userId: req.user.id });
+    logger.info('Template duplicated', { sourceId: id, newId: template.id, headerType: newHeaderType, userId: req.user.id });
 
     res.status(201).json({
       ...template,
@@ -377,6 +431,20 @@ router.post('/sync-all', authenticate, async (req, res) => {
     let created = 0;
 
     for (const mt of metaTemplates) {
+      // Extract component info
+      const headerComp = mt.components?.find(c => c.type === 'HEADER');
+      const bodyComp = mt.components?.find(c => c.type === 'BODY');
+      const footerComp = mt.components?.find(c => c.type === 'FOOTER');
+      const buttonsComp = mt.components?.find(c => c.type === 'BUTTONS');
+
+      const headerType = headerComp?.format || 'NONE';
+      const headerContent = headerComp?.format === 'TEXT' ? headerComp.text : (headerComp?.example?.header_handle?.[0] || headerComp?.example?.header_url?.[0] || null);
+      const footer = footerComp?.text || null;
+      const buttons = buttonsComp?.buttons?.map(b => ({
+        type: b.type, text: b.text,
+        url: b.url || null, phone: b.phone_number || null
+      })) || null;
+
       const existing = await prisma.template.findFirst({ where: { name: mt.name } });
       if (existing) {
         await prisma.template.update({
@@ -384,6 +452,10 @@ router.post('/sync-all', authenticate, async (req, res) => {
           data: {
             status: mt.status.toUpperCase(),
             metaId: mt.id,
+            headerType,
+            headerContent,
+            buttons,
+            footer,
             approvedAt: mt.status === 'APPROVED' ? (existing.approvedAt || new Date()) : null,
             rejectedAt: mt.status === 'REJECTED' ? new Date() : null,
             rejectionReason: mt.rejectionReason
@@ -396,11 +468,15 @@ router.post('/sync-all', authenticate, async (req, res) => {
             name: mt.name,
             displayName: mt.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
             category: mt.category || 'MARKETING',
-            content: mt.components?.find(c => c.type === 'BODY')?.text || '',
+            content: bodyComp?.text || '',
             language: mt.language || 'fr',
             status: mt.status.toUpperCase(),
             metaId: mt.id,
-            variables: (mt.components?.find(c => c.type === 'BODY')?.text?.match(/\{\{(\d+)\}\}/g) || []).map((_, i) => `var${i + 1}`),
+            variables: (bodyComp?.text?.match(/\{\{(\d+)\}\}/g) || []).map((_, i) => `var${i + 1}`),
+            headerType,
+            headerContent,
+            buttons,
+            footer,
             approvedAt: mt.status === 'APPROVED' ? new Date() : null
           }
         });

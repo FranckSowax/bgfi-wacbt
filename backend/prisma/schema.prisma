@@ -98,13 +98,19 @@ model Template {
   variables   String[]         @default([])
   language    String           @default("fr")
   
+  // Header (IMAGE, VIDEO, DOCUMENT, TEXT, or NONE)
+  headerType    String?          @default("NONE")
+  headerContent String?          // Image/video URL or text content
+  buttons       Json?            // [{type:"URL",text:"...",url:"..."}, {type:"QUICK_REPLY",text:"..."}]
+  footer        String?
+
   // Meta approval status
   status      TemplateStatus   @default(PENDING)
   metaId      String?          // WhatsApp template ID from Meta
   approvedAt  DateTime?
   rejectedAt  DateTime?
   rejectionReason String?
-  
+
   // Relations
   campaigns   Campaign[]
   
