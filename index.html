@@ -149,6 +149,9 @@
             ChevronLeft: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15,18 9,12 15,6"/></svg>,
             Tag: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
             Target: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+            XCircle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
+            LayoutGrid: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+            List: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
         };
 
         // =============================================
@@ -2886,11 +2889,47 @@
         // =============================================
         const TemplatesView = () => {
             const [showCreateModal, setShowCreateModal] = useState(false);
-            const { data, loading, error, refetch } = useApi('/templates?limit=50');
+            const { data, loading, error, refetch } = useApi('/templates?limit=100');
             const [form, setForm] = useState({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '' });
             const [creating, setCreating] = useState(false);
 
-            const templates = data?.data || [];
+            // Filters & search
+            const [statusFilter, setStatusFilter] = useState('ALL');
+            const [categoryFilter, setCategoryFilter] = useState('ALL');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [viewMode, setViewMode] = useState('grid');
+
+            const allTemplates = data?.data || [];
+
+            // Counts per status
+            const statusCounts = useMemo(() => {
+                const counts = { ALL: allTemplates.length, APPROVED: 0, PENDING: 0, REJECTED: 0 };
+                allTemplates.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
+                return counts;
+            }, [allTemplates]);
+
+            // Counts per category
+            const categoryCounts = useMemo(() => {
+                const counts = {};
+                allTemplates.forEach(t => { counts[t.category] = (counts[t.category] || 0) + 1; });
+                return counts;
+            }, [allTemplates]);
+
+            // Filter and search
+            const templates = useMemo(() => {
+                let filtered = allTemplates;
+                if (statusFilter !== 'ALL') filtered = filtered.filter(t => t.status === statusFilter);
+                if (categoryFilter !== 'ALL') filtered = filtered.filter(t => t.category === categoryFilter);
+                if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase();
+                    filtered = filtered.filter(t =>
+                        (t.displayName || '').toLowerCase().includes(q) ||
+                        (t.name || '').toLowerCase().includes(q) ||
+                        (t.content || '').toLowerCase().includes(q)
+                    );
+                }
+                return filtered;
+            }, [allTemplates, statusFilter, categoryFilter, searchQuery]);
 
             const handleCreate = async () => {
                 setCreating(true);
@@ -2947,51 +2986,216 @@
                 finally { setDuplicating(false); }
             };
 
+            // Category styling
+            const catStyle = { MARKETING: { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-500' }, UTILITY: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' }, AUTHENTICATION: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' } };
+            const getCatStyle = (cat) => catStyle[cat] || { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' };
+
+            // Status tab config
+            const statusTabs = [
+                { key: 'ALL', label: 'Tous', icon: Icons.Layers },
+                { key: 'APPROVED', label: 'Approuves', icon: Icons.CheckCircle },
+                { key: 'PENDING', label: 'En attente', icon: Icons.Clock },
+                { key: 'REJECTED', label: 'Rejetes', icon: Icons.XCircle }
+            ];
+
             if (loading) return <Spinner />;
             if (error) return <ErrorBox message={error} onRetry={refetch} />;
 
             return (
                 <div className="space-y-6">
+                    {/* Header avec stats */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-4"><Input placeholder="Rechercher un template..." icon={Icons.Search} className="w-64" /></div>
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">Templates WhatsApp</h2>
+                            <p className="text-sm text-gray-500 mt-1">{allTemplates.length} template{allTemplates.length > 1 ? 's' : ''} au total</p>
+                        </div>
                         <div className="flex gap-2">
-                            <Button variant="secondary" onClick={handleSyncAll} disabled={syncing} icon={Icons.RefreshCw}>{syncing ? 'Synchronisation...' : 'Sync Meta'}</Button>
-                            <Button onClick={() => setShowCreateModal(true)} icon={Icons.Plus}>Nouveau Template</Button>
+                            <Button variant="secondary" onClick={handleSyncAll} disabled={syncing} icon={Icons.RefreshCw}>{syncing ? 'Sync...' : 'Sync Meta'}</Button>
+                            <Button onClick={() => setShowCreateModal(true)} icon={Icons.Plus}>Nouveau</Button>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {templates.length === 0 && <div className="col-span-2 text-center text-gray-500 py-8">Aucun template</div>}
-                        {templates.map(template => (
-                            <Card key={template.id}>
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${template.category === 'MARKETING' ? 'bg-purple-100 text-purple-600' : template.category === 'UTILITY' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}><Icons.FileText /></div>
-                                        <div><p className="font-medium text-gray-900">{template.displayName || template.name}</p><p className="text-sm text-gray-500">{catMap[template.category] || template.category}</p></div>
-                                    </div>
-                                    <Badge variant={tplStatusVariant[template.status] || 'default'}>{tplStatusMap[template.status] || template.status}</Badge>
-                                </div>
-                                {template.headerType && template.headerType !== 'NONE' && (
-                                    <div className="mb-3">
-                                        {template.headerType === 'IMAGE' && template.headerContent && (
-                                            <div className="rounded-lg overflow-hidden border border-gray-200 mb-2"><img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="Header" className="w-full h-32 object-cover" onError={e => e.target.style.display='none'} /></div>
-                                        )}
-                                        <Badge variant="info">{template.headerType === 'IMAGE' ? 'Image' : template.headerType === 'VIDEO' ? 'Video' : 'En-tete texte'}</Badge>
-                                    </div>
-                                )}
-                                <div className="bg-gray-50 p-4 rounded-xl mb-4"><p className="text-sm text-gray-700 whitespace-pre-line">{template.content}</p></div>
-                                {template.footer && <p className="text-xs text-gray-400 mb-2 italic">{template.footer}</p>}
-                                {template.buttons && template.buttons.length > 0 && (
-                                    <div className="mb-3 flex gap-1 flex-wrap">{template.buttons.map((b, i) => <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">{b.type === 'URL' ? 'URL: ' : b.type === 'PHONE_NUMBER' ? 'Tel: ' : ''}{b.text}</span>)}</div>
-                                )}
-                                {template.variables && template.variables.length > 0 && <div className="mb-4 flex gap-1 flex-wrap">{template.variables.map((v, i) => <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{'{{'}{v}{'}}'}</span>)}</div>}
-                                <div className="flex gap-2">
-                                    <Button variant="ghost" size="sm" icon={Icons.Copy} onClick={() => openDuplicate(template)} title="Dupliquer" />
-                                    <Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDelete(template.id)} title="Supprimer" />
-                                </div>
-                            </Card>
-                        ))}
+                    {/* Status tabs */}
+                    <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
+                        {statusTabs.map(tab => {
+                            const count = statusCounts[tab.key] || 0;
+                            const active = statusFilter === tab.key;
+                            return (
+                                <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                    <tab.icon className="w-4 h-4" />
+                                    {tab.label}
+                                    <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${active ? (tab.key === 'APPROVED' ? 'bg-green-100 text-green-700' : tab.key === 'PENDING' ? 'bg-amber-100 text-amber-700' : tab.key === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-700') : 'bg-gray-200 text-gray-500'}`}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
+
+                    {/* Search + Category filter + View toggle */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="relative flex-1 max-w-md">
+                            <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input type="text" placeholder="Rechercher par nom ou contenu..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-bgfi-primary/20 focus:border-bgfi-primary" />
+                            {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><Icons.X className="w-4 h-4" /></button>}
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap">
+                            <button onClick={() => setCategoryFilter('ALL')}
+                                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${categoryFilter === 'ALL' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                Toutes categories
+                            </button>
+                            {Object.entries(categoryCounts).map(([cat, count]) => (
+                                <button key={cat} onClick={() => setCategoryFilter(cat)}
+                                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${categoryFilter === cat ? getCatStyle(cat).bg + ' ' + getCatStyle(cat).text : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                    <span className={`w-2 h-2 rounded-full ${getCatStyle(cat).dot}`}></span>
+                                    {catMap[cat] || cat}
+                                    <span className="opacity-60">({count})</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-1 ml-auto bg-gray-100 p-1 rounded-lg">
+                            <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><Icons.LayoutGrid className="w-4 h-4" /></button>
+                            <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><Icons.List className="w-4 h-4" /></button>
+                        </div>
+                    </div>
+
+                    {/* Results info */}
+                    {(statusFilter !== 'ALL' || categoryFilter !== 'ALL' || searchQuery) && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                            <span>{templates.length} resultat{templates.length > 1 ? 's' : ''}</span>
+                            {(statusFilter !== 'ALL' || categoryFilter !== 'ALL' || searchQuery) && (
+                                <button onClick={() => { setStatusFilter('ALL'); setCategoryFilter('ALL'); setSearchQuery(''); }} className="text-bgfi-primary hover:underline text-xs ml-1">Effacer les filtres</button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Grid view */}
+                    {viewMode === 'grid' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                            {templates.length === 0 && <div className="col-span-3 text-center text-gray-400 py-12"><Icons.FileText className="w-12 h-12 mx-auto mb-3 opacity-40" /><p className="font-medium">Aucun template trouve</p><p className="text-sm mt-1">Modifiez vos filtres ou creez un nouveau template</p></div>}
+                            {templates.map(template => {
+                                const cs = getCatStyle(template.category);
+                                return (
+                                    <div key={template.id} className="bg-white rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all overflow-hidden group">
+                                        {/* Header image or color band */}
+                                        {template.headerType === 'IMAGE' && template.headerContent ? (
+                                            <div className="h-36 overflow-hidden bg-gray-100">
+                                                <img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="" className="w-full h-full object-cover" onError={e => { e.target.parentElement.className = 'h-3 ' + cs.bg; e.target.style.display='none'; }} />
+                                            </div>
+                                        ) : (
+                                            <div className={`h-2 ${cs.bg}`}></div>
+                                        )}
+                                        <div className="p-5">
+                                            {/* Top: category + status */}
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cs.bg} ${cs.text}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${cs.dot}`}></span>
+                                                    {catMap[template.category] || template.category}
+                                                </span>
+                                                <Badge variant={tplStatusVariant[template.status] || 'default'}>{tplStatusMap[template.status] || template.status}</Badge>
+                                            </div>
+                                            {/* Name */}
+                                            <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{template.displayName || template.name}</h3>
+                                            <p className="text-xs text-gray-400 mb-3 font-mono">{template.name}</p>
+                                            {/* Content preview */}
+                                            <div className="bg-gray-50 p-3 rounded-xl mb-3">
+                                                <p className="text-sm text-gray-600 whitespace-pre-line line-clamp-3">{template.content}</p>
+                                            </div>
+                                            {/* Footer */}
+                                            {template.footer && <p className="text-xs text-gray-400 mb-3 italic truncate">{template.footer}</p>}
+                                            {/* Tags: header type, buttons, variables */}
+                                            <div className="flex gap-1.5 flex-wrap mb-4">
+                                                {template.headerType && template.headerType !== 'NONE' && (
+                                                    <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{template.headerType === 'IMAGE' ? 'Image' : template.headerType === 'VIDEO' ? 'Video' : 'Texte'}</span>
+                                                )}
+                                                {template.buttons && template.buttons.length > 0 && template.buttons.map((b, i) => (
+                                                    <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{b.type === 'URL' ? 'URL' : b.type === 'PHONE_NUMBER' ? 'Tel' : 'QR'}: {b.text}</span>
+                                                ))}
+                                                {template.variables && template.variables.length > 0 && template.variables.map((v, i) => (
+                                                    <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{'{{'}{v}{'}}'}</span>
+                                                ))}
+                                            </div>
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                                                <span className="text-xs text-gray-400">{template.language?.toUpperCase() || 'FR'}</span>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => openDuplicate(template)} className="p-1.5 rounded-lg text-gray-400 hover:text-bgfi-primary hover:bg-bgfi-primary/5 transition-colors" title="Dupliquer"><Icons.Copy className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDelete(template.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Supprimer"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* List view */}
+                    {viewMode === 'list' && (
+                        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-gray-100">
+                                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Template</th>
+                                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Categorie</th>
+                                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Type</th>
+                                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Statut</th>
+                                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Langue</th>
+                                        <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {templates.length === 0 && <tr><td colSpan="6" className="text-center text-gray-400 py-12">Aucun template trouve</td></tr>}
+                                    {templates.map(template => {
+                                        const cs = getCatStyle(template.category);
+                                        return (
+                                            <tr key={template.id} className="hover:bg-gray-50 transition-colors group">
+                                                <td className="px-5 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {template.headerType === 'IMAGE' && template.headerContent ? (
+                                                            <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                                                                <img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
+                                                            </div>
+                                                        ) : (
+                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${cs.bg} ${cs.text}`}><Icons.FileText className="w-5 h-5" /></div>
+                                                        )}
+                                                        <div className="min-w-0">
+                                                            <p className="font-medium text-gray-900 truncate">{template.displayName || template.name}</p>
+                                                            <p className="text-xs text-gray-400 font-mono truncate">{template.name}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${cs.bg} ${cs.text}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${cs.dot}`}></span>
+                                                        {catMap[template.category] || template.category}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {template.headerType && template.headerType !== 'NONE' && <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{template.headerType === 'IMAGE' ? 'Image' : template.headerType === 'VIDEO' ? 'Video' : 'Texte'}</span>}
+                                                        {template.buttons && template.buttons.length > 0 && <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{template.buttons.length} bouton{template.buttons.length > 1 ? 's' : ''}</span>}
+                                                        {template.variables && template.variables.length > 0 && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{template.variables.length} var.</span>}
+                                                        {(!template.headerType || template.headerType === 'NONE') && (!template.buttons || template.buttons.length === 0) && <span className="text-xs text-gray-400">Texte seul</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4"><Badge variant={tplStatusVariant[template.status] || 'default'}>{tplStatusMap[template.status] || template.status}</Badge></td>
+                                                <td className="px-5 py-4"><span className="text-xs text-gray-500 uppercase">{template.language || 'fr'}</span></td>
+                                                <td className="px-5 py-4 text-right">
+                                                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => openDuplicate(template)} className="p-1.5 rounded-lg text-gray-400 hover:text-bgfi-primary hover:bg-bgfi-primary/5 transition-colors" title="Dupliquer"><Icons.Copy className="w-4 h-4" /></button>
+                                                        <button onClick={() => handleDelete(template.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Supprimer"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
 
                     {showCreateModal && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
