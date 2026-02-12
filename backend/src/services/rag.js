@@ -63,12 +63,44 @@ async function initialize() {
 
     await prisma.$queryRawUnsafe(`INSERT INTO rag_config (id) VALUES (1) ON CONFLICT DO NOTHING`);
 
+    // Token usage tracking table
+    await prisma.$queryRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS rag_token_usage (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        service VARCHAR(50) NOT NULL,
+        model VARCHAR(50),
+        prompt_tokens INT DEFAULT 0,
+        completion_tokens INT DEFAULT 0,
+        total_tokens INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     initialized = true;
     logger.info('RAG tables initialized');
     return true;
   } catch (error) {
     logger.error('RAG initialization error', { error: error.message });
     return false;
+  }
+}
+
+// ============================================
+// Log token usage to tracking table
+// ============================================
+async function logTokenUsage(service, model, usage) {
+  try {
+    await prisma.$queryRawUnsafe(
+      `INSERT INTO rag_token_usage (service, model, prompt_tokens, completion_tokens, total_tokens)
+       VALUES ($1, $2, $3, $4, $5)`,
+      service,
+      model || 'unknown',
+      usage.prompt_tokens || 0,
+      usage.completion_tokens || 0,
+      usage.total_tokens || 0
+    );
+  } catch (err) {
+    logger.warn('Failed to log token usage', { error: err.message });
   }
 }
 
@@ -103,6 +135,11 @@ async function generateEmbeddingsBatch(texts) {
 
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'Erreur embedding OpenAI');
+
+  // Track token usage
+  if (data.usage) {
+    logTokenUsage('embedding', EMBEDDING_MODEL, data.usage);
+  }
 
   // OpenAI returns embeddings sorted by index
   return data.data
@@ -288,6 +325,11 @@ async function chat(message, contactId = null) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'Erreur OpenAI');
 
+  // Track token usage
+  if (data.usage) {
+    logTokenUsage('chat', config.model || process.env.OPENAI_MODEL || 'gpt-4', data.usage);
+  }
+
   let reply = data.choices?.[0]?.message?.content;
   if (!reply) throw new Error('Pas de reponse OpenAI');
 
@@ -443,6 +485,101 @@ async function getStats() {
   };
 }
 
+// ============================================
+// Statistiques de consommation de tokens OpenAI
+// ============================================
+
+// Pricing per 1M tokens (USD)
+const TOKEN_PRICING_USD = {
+  'gpt-4': { input: 30, output: 60 },
+  'gpt-4-turbo': { input: 10, output: 30 },
+  'gpt-4o': { input: 2.50, output: 10 },
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'text-embedding-3-small': { input: 0.02, output: 0 },
+  'text-embedding-3-large': { input: 0.13, output: 0 }
+};
+const USD_TO_FCFA = 1200; // x2 x600
+
+async function getTokenStats() {
+  await initialize();
+  try {
+    const totals = await prisma.$queryRawUnsafe(`
+      SELECT
+        COALESCE(SUM(prompt_tokens), 0)::int as total_prompt,
+        COALESCE(SUM(completion_tokens), 0)::int as total_completion,
+        COALESCE(SUM(total_tokens), 0)::int as total_tokens,
+        COUNT(*)::int as total_calls
+      FROM rag_token_usage
+    `);
+
+    const byService = await prisma.$queryRawUnsafe(`
+      SELECT
+        service,
+        model,
+        COALESCE(SUM(prompt_tokens), 0)::int as prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::int as completion_tokens,
+        COALESCE(SUM(total_tokens), 0)::int as total_tokens,
+        COUNT(*)::int as calls
+      FROM rag_token_usage
+      GROUP BY service, model
+      ORDER BY total_tokens DESC
+    `);
+
+    const daily = await prisma.$queryRawUnsafe(`
+      SELECT
+        DATE(created_at) as date,
+        COALESCE(SUM(prompt_tokens), 0)::int as prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::int as completion_tokens,
+        COALESCE(SUM(total_tokens), 0)::int as total_tokens,
+        COUNT(*)::int as calls
+      FROM rag_token_usage
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    `);
+
+    // Calculate cost by model
+    let totalCostUSD = 0;
+    const costByService = byService.map(s => {
+      const pricing = TOKEN_PRICING_USD[s.model] || TOKEN_PRICING_USD['gpt-4'];
+      const inputCostUSD = (s.prompt_tokens / 1_000_000) * pricing.input;
+      const outputCostUSD = (s.completion_tokens / 1_000_000) * pricing.output;
+      const costUSD = inputCostUSD + outputCostUSD;
+      totalCostUSD += costUSD;
+      return {
+        ...s,
+        costUSD: Math.round(costUSD * 10000) / 10000,
+        costFCFA: Math.round(costUSD * USD_TO_FCFA)
+      };
+    });
+
+    const t = totals[0] || { total_prompt: 0, total_completion: 0, total_tokens: 0, total_calls: 0 };
+
+    return {
+      totals: {
+        ...t,
+        costUSD: Math.round(totalCostUSD * 10000) / 10000,
+        costFCFA: Math.round(totalCostUSD * USD_TO_FCFA)
+      },
+      byService: costByService,
+      daily,
+      pricing: {
+        model: process.env.OPENAI_MODEL || 'gpt-4',
+        embeddingModel: EMBEDDING_MODEL,
+        usdToFcfa: USD_TO_FCFA
+      }
+    };
+  } catch (err) {
+    logger.warn('Failed to get token stats', { error: err.message });
+    return {
+      totals: { total_prompt: 0, total_completion: 0, total_tokens: 0, total_calls: 0, costUSD: 0, costFCFA: 0 },
+      byService: [],
+      daily: [],
+      pricing: { model: process.env.OPENAI_MODEL || 'gpt-4', embeddingModel: EMBEDDING_MODEL, usdToFcfa: USD_TO_FCFA }
+    };
+  }
+}
+
 module.exports = {
   initialize,
   generateEmbedding,
@@ -455,5 +592,7 @@ module.exports = {
   deleteDocument,
   getConfig,
   updateConfig,
-  getStats
+  getStats,
+  logTokenUsage,
+  getTokenStats
 };

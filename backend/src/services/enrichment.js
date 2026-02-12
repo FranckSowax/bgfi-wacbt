@@ -8,6 +8,7 @@ const { PrismaClient } = require('@prisma/client');
 const fetch = require('node-fetch');
 const logger = require('../utils/logger');
 const ragService = require('./rag');
+const { logTokenUsage } = ragService;
 
 const prisma = new PrismaClient();
 
@@ -96,6 +97,11 @@ async function enrichConversation(sessionId) {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error?.message || 'Erreur OpenAI enrichissement');
+    }
+
+    // Track token usage
+    if (data.usage) {
+      logTokenUsage('enrichment', model, data.usage);
     }
 
     const content = data.choices[0]?.message?.content;
@@ -286,6 +292,10 @@ Retourne un JSON avec:
       });
 
       const data = await response.json();
+      // Track token usage
+      if (data.usage) {
+        logTokenUsage('report', process.env.ENRICHMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4', data.usage);
+      }
       if (response.ok && data.choices[0]?.message?.content) {
         const result = JSON.parse(data.choices[0].message.content);
         topCustomerNeeds = Array.isArray(result.topCustomerNeeds) ? result.topCustomerNeeds.slice(0, 5) : topCustomerNeeds;

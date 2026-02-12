@@ -271,6 +271,19 @@ router.get('/stats', authenticate, async (req, res) => {
 });
 
 // ============================================
+// GET /api/chatbot/token-usage - Consommation de tokens OpenAI
+// ============================================
+router.get('/token-usage', authenticate, async (req, res) => {
+  try {
+    const stats = await ragService.getTokenStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error('Error fetching token usage', { error: error.message });
+    res.status(500).json({ error: 'Erreur lors de la recuperation de la consommation de tokens' });
+  }
+});
+
+// ============================================
 // GET /api/chatbot/sessions - Sessions de chat avec filtres d'enrichissement
 // ============================================
 router.get('/sessions', authenticate, async (req, res) => {
