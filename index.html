@@ -1929,10 +1929,12 @@
                                                     <h4 className="font-medium text-gray-900">Rapport du {new Date(r.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</h4>
                                                     <p className="text-sm text-gray-500 mt-1">{r.totalConversations} conversations - Satisfaction {r.avgSatisfactionScore?.toFixed(1) || 'N/A'}/5</p>
                                                 </div>
-                                                <div className="flex items-center gap-3 text-sm">
-                                                    <span className="text-green-600">{r.sentimentPositive} positif</span>
-                                                    <span className="text-orange-600">{r.sentimentNegative} negatif</span>
-                                                    <span className="text-red-600">{r.sentimentFrustrated} frustre</span>
+                                                <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap justify-end">
+                                                    {r.sentimentPositive > 0 && <span className="text-green-600">{r.sentimentPositive} positif</span>}
+                                                    {r.sentimentNeutral > 0 && <span className="text-gray-500">{r.sentimentNeutral} neutre</span>}
+                                                    {r.sentimentNegative > 0 && <span className="text-orange-600">{r.sentimentNegative} negatif</span>}
+                                                    {r.sentimentFrustrated > 0 && <span className="text-red-600">{r.sentimentFrustrated} frustre</span>}
+                                                    {!r.sentimentPositive && !r.sentimentNeutral && !r.sentimentNegative && !r.sentimentFrustrated && <span className="text-gray-400">Aucun sentiment</span>}
                                                     <Icons.ChevronRight />
                                                 </div>
                                             </div>
