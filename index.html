@@ -68,7 +68,7 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Sector, Cell, BarChart, Bar, Rectangle, LabelList } = Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Sector, Cell, BarChart, Bar, Rectangle, LabelList, Label } = Recharts;
 
         // =============================================
         // API Layer
@@ -1354,6 +1354,7 @@
             };
 
             const PIE_COLORS = ['#22c55e', '#9ca3af', '#f97316', '#ef4444', '#8b5cf6', '#3b82f6', '#eab308', '#06b6d4'];
+            const MIXED_CHART_COLORS = ['#003366', '#00a86b', '#0077cc', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
 
             // Group sessions by contact phone
             const groupedSessions = useMemo(() => {
@@ -1831,42 +1832,47 @@
 
                                     {(selectedReport.totalConversations > 0) && (
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                            {/* Sentiment pie chart */}
+                                            {/* Sentiment bar chart */}
                                             <Card className="p-4">
-                                                <h4 className="font-medium text-gray-900 mb-3">Repartition des sentiments</h4>
+                                                <h4 className="font-medium text-gray-900 mb-1">Repartition des sentiments</h4>
+                                                <p className="text-xs text-gray-500 mb-3">Analyse emotionnelle des conversations</p>
                                                 {(() => {
                                                     const sentData = [
-                                                        { name: 'Positif', value: selectedReport.sentimentPositive || 0 },
-                                                        { name: 'Neutre', value: selectedReport.sentimentNeutral || 0 },
-                                                        { name: 'Negatif', value: selectedReport.sentimentNegative || 0 },
-                                                        { name: 'Frustre', value: selectedReport.sentimentFrustrated || 0 }
+                                                        { name: 'Positif', value: selectedReport.sentimentPositive || 0, key: 'POSITIVE' },
+                                                        { name: 'Neutre', value: selectedReport.sentimentNeutral || 0, key: 'NEUTRAL' },
+                                                        { name: 'Negatif', value: selectedReport.sentimentNegative || 0, key: 'NEGATIVE' },
+                                                        { name: 'Frustre', value: selectedReport.sentimentFrustrated || 0, key: 'FRUSTRATED' }
                                                     ].filter(d => d.value > 0);
-                                                    const sentColors = ['#22c55e', '#9ca3af', '#f97316', '#ef4444'];
                                                     return sentData.length > 0 ? (
                                                         <ResponsiveContainer width="100%" height={200}>
-                                                            <PieChart>
-                                                                <Pie data={sentData} dataKey="value" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                                                    {sentData.map((_, i) => <Cell key={i} fill={sentColors[i % sentColors.length]} />)}
-                                                                </Pie>
-                                                                <Tooltip />
-                                                            </PieChart>
+                                                            <BarChart data={sentData}>
+                                                                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                                <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 12 }} />
+                                                                <Tooltip cursor={false} />
+                                                                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                                    {sentData.map((entry, i) => <Cell key={i} fill={sentimentChartColors[entry.key] || '#9ca3af'} />)}
+                                                                </Bar>
+                                                            </BarChart>
                                                         </ResponsiveContainer>
                                                     ) : <p className="text-sm text-gray-400 text-center py-8">Aucune donnee de sentiment</p>;
                                                 })()}
                                             </Card>
 
-                                            {/* Intent bar chart */}
+                                            {/* Intent horizontal bar chart */}
                                             <Card className="p-4">
-                                                <h4 className="font-medium text-gray-900 mb-3">Intentions detectees</h4>
+                                                <h4 className="font-medium text-gray-900 mb-1">Intentions detectees</h4>
+                                                <p className="text-xs text-gray-500 mb-3">Categories de demandes clients</p>
                                                 {(() => {
                                                     const intentData = breakdownToChartData(selectedReport.intentBreakdown, intentLabels).slice(0, 6);
                                                     return intentData.length > 0 ? (
                                                         <ResponsiveContainer width="100%" height={200}>
-                                                            <BarChart data={intentData} layout="vertical" margin={{ left: 80 }}>
-                                                                <XAxis type="number" />
-                                                                <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 11 }} />
-                                                                <Tooltip />
-                                                                <Bar dataKey="value" fill="#003366" radius={[0, 4, 4, 0]} />
+                                                            <BarChart data={intentData} layout="vertical" margin={{ left: 0 }}>
+                                                                <YAxis dataKey="name" type="category" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11 }} width={80} />
+                                                                <XAxis dataKey="value" type="number" hide />
+                                                                <Tooltip cursor={false} />
+                                                                <Bar dataKey="value" radius={5}>
+                                                                    {intentData.map((_, i) => <Cell key={i} fill={MIXED_CHART_COLORS[i % MIXED_CHART_COLORS.length]} />)}
+                                                                </Bar>
                                                             </BarChart>
                                                         </ResponsiveContainer>
                                                     ) : <p className="text-sm text-gray-400 text-center py-8">Aucune intention detectee</p>;
@@ -1944,60 +1950,118 @@
                                     </div>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        {/* Sentiment pie */}
+                                        {/* Sentiment bar chart */}
                                         <Card className="p-4">
-                                            <h4 className="font-medium text-gray-900 mb-3">Sentiments</h4>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <PieChart>
-                                                    <Pie data={breakdownToChartData(enrichStats.sentimentBreakdown, sentimentLabels)} dataKey="value" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                                        {breakdownToChartData(enrichStats.sentimentBreakdown, sentimentLabels).map((entry, i) => (
-                                                            <Cell key={i} fill={sentimentChartColors[entry.key] || PIE_COLORS[i % PIE_COLORS.length]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                            <h4 className="font-medium text-gray-900 mb-1">Sentiments</h4>
+                                            <p className="text-xs text-gray-500 mb-3">Repartition par type de sentiment</p>
+                                            {(() => {
+                                                const sentData = breakdownToChartData(enrichStats.sentimentBreakdown, sentimentLabels);
+                                                return sentData.length > 0 ? (
+                                                    <React.Fragment>
+                                                        <ResponsiveContainer width="100%" height={220}>
+                                                            <BarChart data={sentData}>
+                                                                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                                <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 12 }} />
+                                                                <Tooltip cursor={false} />
+                                                                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                                    {sentData.map((entry, i) => <Cell key={i} fill={sentimentChartColors[entry.key] || '#9ca3af'} />)}
+                                                                </Bar>
+                                                            </BarChart>
+                                                        </ResponsiveContainer>
+                                                        <p className="text-xs text-gray-500 mt-2">Score de satisfaction moyen : {enrichStats.avgSatisfaction?.toFixed(1) || 'N/A'}/5</p>
+                                                    </React.Fragment>
+                                                ) : <p className="text-sm text-gray-400 text-center py-8">Aucune donnee de sentiment</p>;
+                                            })()}
                                         </Card>
 
-                                        {/* Intent bar */}
+                                        {/* Intent horizontal bar chart - mixed colors */}
                                         <Card className="p-4">
-                                            <h4 className="font-medium text-gray-900 mb-3">Top Intentions</h4>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <BarChart data={breakdownToChartData(enrichStats.intentBreakdown, intentLabels).slice(0, 8)} layout="vertical" margin={{ left: 80 }}>
-                                                    <XAxis type="number" />
-                                                    <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 11 }} />
-                                                    <Tooltip />
-                                                    <Bar dataKey="value" fill="#003366" radius={[0, 4, 4, 0]} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
+                                            <h4 className="font-medium text-gray-900 mb-1">Top Intentions</h4>
+                                            <p className="text-xs text-gray-500 mb-3">Categories de demandes detectees</p>
+                                            {(() => {
+                                                const intentData = breakdownToChartData(enrichStats.intentBreakdown, intentLabels).slice(0, 8);
+                                                return intentData.length > 0 ? (
+                                                    <React.Fragment>
+                                                        <ResponsiveContainer width="100%" height={220}>
+                                                            <BarChart data={intentData} layout="vertical" margin={{ left: 0 }}>
+                                                                <YAxis dataKey="name" type="category" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11 }} width={80} />
+                                                                <XAxis dataKey="value" type="number" hide />
+                                                                <Tooltip cursor={false} />
+                                                                <Bar dataKey="value" radius={5}>
+                                                                    {intentData.map((_, i) => <Cell key={i} fill={MIXED_CHART_COLORS[i % MIXED_CHART_COLORS.length]} />)}
+                                                                </Bar>
+                                                            </BarChart>
+                                                        </ResponsiveContainer>
+                                                        <p className="text-xs text-gray-500 mt-2">{intentData.length} categories detectees</p>
+                                                    </React.Fragment>
+                                                ) : <p className="text-sm text-gray-400 text-center py-8">Aucune intention detectee</p>;
+                                            })()}
                                         </Card>
 
-                                        {/* Product bar */}
+                                        {/* Product horizontal bar chart - mixed colors */}
                                         <Card className="p-4">
-                                            <h4 className="font-medium text-gray-900 mb-3">Produits mentionnes</h4>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <BarChart data={breakdownToChartData(enrichStats.productBreakdown, productLabels).slice(0, 8)} layout="vertical" margin={{ left: 90 }}>
-                                                    <XAxis type="number" />
-                                                    <YAxis type="category" dataKey="name" width={85} tick={{ fontSize: 11 }} />
-                                                    <Tooltip />
-                                                    <Bar dataKey="value" fill="#00a86b" radius={[0, 4, 4, 0]} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
+                                            <h4 className="font-medium text-gray-900 mb-1">Produits mentionnes</h4>
+                                            <p className="text-xs text-gray-500 mb-3">Produits bancaires evoques par les clients</p>
+                                            {(() => {
+                                                const productData = breakdownToChartData(enrichStats.productBreakdown, productLabels).slice(0, 8);
+                                                return productData.length > 0 ? (
+                                                    <React.Fragment>
+                                                        <ResponsiveContainer width="100%" height={220}>
+                                                            <BarChart data={productData} layout="vertical" margin={{ left: 0 }}>
+                                                                <YAxis dataKey="name" type="category" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11 }} width={90} />
+                                                                <XAxis dataKey="value" type="number" hide />
+                                                                <Tooltip cursor={false} />
+                                                                <Bar dataKey="value" radius={5}>
+                                                                    {productData.map((_, i) => <Cell key={i} fill={MIXED_CHART_COLORS[(i + 1) % MIXED_CHART_COLORS.length]} />)}
+                                                                </Bar>
+                                                            </BarChart>
+                                                        </ResponsiveContainer>
+                                                        <p className="text-xs text-gray-500 mt-2">{productData.length} produits evoques</p>
+                                                    </React.Fragment>
+                                                ) : <p className="text-sm text-gray-400 text-center py-8">Aucun produit mentionne</p>;
+                                            })()}
                                         </Card>
 
-                                        {/* Urgency pie */}
-                                        <Card className="p-4">
-                                            <h4 className="font-medium text-gray-900 mb-3">Niveaux d'urgence</h4>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <PieChart>
-                                                    <Pie data={breakdownToChartData(enrichStats.urgencyBreakdown, { LOW: 'Basse', MEDIUM: 'Moyenne', HIGH: 'Haute', CRITICAL: 'Critique' })} dataKey="value" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                                        {breakdownToChartData(enrichStats.urgencyBreakdown).map((entry, i) => (
-                                                            <Cell key={i} fill={['#3b82f6', '#eab308', '#f97316', '#ef4444'][i] || PIE_COLORS[i]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                        {/* Urgency radial/donut gauge */}
+                                        <Card className="p-4 flex flex-col">
+                                            <h4 className="font-medium text-gray-900 mb-1 text-center">Niveaux d'urgence</h4>
+                                            <p className="text-xs text-gray-500 mb-2 text-center">Proportion d'urgence elevee</p>
+                                            {(() => {
+                                                const urgData = enrichStats.urgencyBreakdown || {};
+                                                const total = Object.values(urgData).reduce((a, b) => a + b, 0);
+                                                const elevated = (urgData.MEDIUM || 0) + (urgData.HIGH || 0) + (urgData.CRITICAL || 0);
+                                                if (!total) return <p className="text-sm text-gray-400 text-center py-8">Aucune donnee d'urgence</p>;
+                                                const pct = Math.round((elevated / total) * 100);
+                                                const gaugeData = [
+                                                    { name: 'Elevee', value: elevated },
+                                                    { name: 'Basse', value: total - elevated }
+                                                ];
+                                                return (
+                                                    <React.Fragment>
+                                                        <div className="flex-1 flex items-center justify-center">
+                                                            <ResponsiveContainer width="100%" height={190}>
+                                                                <PieChart>
+                                                                    <Pie data={gaugeData} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={85} startAngle={90} endAngle={-270} stroke="none" paddingAngle={elevated > 0 && (total - elevated) > 0 ? 3 : 0}>
+                                                                        <Cell fill="#f97316" />
+                                                                        <Cell fill="#e5e7eb" />
+                                                                        <Label content={({ viewBox }) => {
+                                                                            const { cx, cy } = viewBox;
+                                                                            return (
+                                                                                <g>
+                                                                                    <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: '1.75rem', fontWeight: 'bold', fill: '#1f2937' }}>{elevated}</text>
+                                                                                    <text x={cx} y={cy + 16} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: '0.65rem', fill: '#6b7280' }}>Urgence elevee</text>
+                                                                                </g>
+                                                                            );
+                                                                        }} />
+                                                                    </Pie>
+                                                                    <Tooltip />
+                                                                </PieChart>
+                                                            </ResponsiveContainer>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 text-center mt-1">{pct}% des conversations en urgence elevee</p>
+                                                    </React.Fragment>
+                                                );
+                                            })()}
                                         </Card>
                                     </div>
                                 </>
