@@ -4002,13 +4002,6 @@
                         React.createElement('span', { className: 'text-xs text-blue-700' }, 'Sessions chatbot (24h)'),
                         React.createElement('span', { className: 'text-sm font-bold text-blue-900' }, chatbotStatus.recentSessions || 0)
                     ),
-
-                    // Config note
-                    React.createElement('div', { className: 'p-3 bg-gray-100 rounded-xl' },
-                        React.createElement('p', { className: 'text-xs text-gray-500 leading-relaxed' },
-                            'Configuration via variables d\'environnement Netlify : CHATBOT_AUTO_REPLY, OPENAI_API_KEY, OPENAI_MODEL, CHATBOT_SYSTEM_PROMPT, CHATBOT_FALLBACK_MESSAGE, RAG_SERVICE_URL'
-                        )
-                    )
                 ) : React.createElement('div', { className: 'py-8 text-center text-gray-500' }, 'Impossible de charger la configuration')
             );
         };
