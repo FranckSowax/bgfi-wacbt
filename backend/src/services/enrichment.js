@@ -74,9 +74,9 @@ async function enrichConversation(sessionId) {
     return `${role}: ${m.content}`;
   }).join('\n');
 
-  // response_format json_object requires gpt-4-turbo, gpt-4o or later (NOT base gpt-4)
-  const baseModel = process.env.ENRICHMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4';
-  const model = baseModel === 'gpt-4' ? 'gpt-4o' : baseModel;
+  // response_format json_object requires gpt-4-turbo, gpt-4o, gpt-4.1 or later (NOT base gpt-4)
+  const baseModel = process.env.ENRICHMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4.1';
+  const model = baseModel === 'gpt-4' ? 'gpt-4.1' : baseModel;
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -284,8 +284,8 @@ Retourne un JSON avec:
 - "keyInsights": paragraphe d'analyse des tendances (3-5 phrases, en francais)
 - "recommendations": paragraphe de recommandations pour ameliorer le service (3-5 phrases, en francais)`;
 
-      const reportBaseModel = process.env.ENRICHMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4';
-      const reportModel = reportBaseModel === 'gpt-4' ? 'gpt-4o' : reportBaseModel;
+      const reportBaseModel = process.env.ENRICHMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4.1';
+      const reportModel = reportBaseModel === 'gpt-4' ? 'gpt-4.1' : reportBaseModel;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',

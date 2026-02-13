@@ -1205,7 +1205,7 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Parametres RAG">
                                 <div className="space-y-6">
-                                    <Select label="Modele LLM" value="gpt-4" options={[{ value: 'gpt-4', label: 'GPT-4 (Recommande)' }, { value: 'gpt-3.5', label: 'GPT-3.5 Turbo' }]} />
+                                    <Select label="Modele LLM" value="gpt-4.1" options={[{ value: 'gpt-4.1', label: 'GPT-4.1 (Recommande)' }, { value: 'gpt-4o', label: 'GPT-4o' }, { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }]} />
                                     <div><label className="block text-sm font-medium text-gray-700 mb-2">Nombre de chunks (contexte)</label><input type="range" min="1" max="10" defaultValue="5" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>1</span><span>5</span><span>10</span></div></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-2">Seuil de similarite</label><input type="range" min="0" max="100" defaultValue="75" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>0%</span><span>75%</span><span>100%</span></div></div>
                                     <div className="flex items-center gap-3"><input type="checkbox" id="citations" defaultChecked className="w-4 h-4 text-bgfi-primary rounded" /><label htmlFor="citations" className="text-sm text-gray-700">Inclure les citations des sources</label></div>
@@ -4199,14 +4199,14 @@
 
                                 {/* Grille tarifaire IA */}
                                 <div>
-                                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Tarification OpenAI ({tokenUsage.pricing?.model || 'gpt-4'})</h3>
+                                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Tarification OpenAI ({tokenUsage.pricing?.model || 'gpt-4.1'})</h3>
                                     <div className="bg-gray-50 rounded-xl overflow-x-auto">
                                         <table className="w-full min-w-[320px]">
                                             <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 sm:px-4 text-xs font-medium text-gray-500">Modele</th><th className="text-right py-2 px-3 sm:px-4 text-xs font-medium text-gray-500 whitespace-nowrap">Prix FCFA/1M</th></tr></thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.model || 'gpt-4'} (entree)</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">36 000 FCFA</td></tr>
-                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.model || 'gpt-4'} (sortie)</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">72 000 FCFA</td></tr>
-                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.embeddingModel || 'text-embedding-3-small'}</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">24 FCFA</td></tr>
+                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.model || 'gpt-4.1'} (entree)</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">5 600 FCFA</td></tr>
+                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.model || 'gpt-4.1'} (sortie)</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">22 400 FCFA</td></tr>
+                                                <tr><td className="py-2 px-4 text-sm text-gray-700">{tokenUsage.pricing?.embeddingModel || 'text-embedding-3-small'}</td><td className="py-2 px-4 text-sm font-medium text-gray-900 text-right">56 FCFA</td></tr>
                                             </tbody>
                                         </table>
                                     </div>

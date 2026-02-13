@@ -52,7 +52,7 @@ async function initialize() {
         bot_name VARCHAR(100) DEFAULT 'Stella',
         welcome_message TEXT DEFAULT 'Bonjour ! Je suis Stella, votre assistant BGFI disponible 24/7. Comment puis-je vous aider aujourd''hui ?',
         system_prompt TEXT DEFAULT 'Tu es Stella, l''assistant virtuel de BGFI Bank Gabon sur WhatsApp. Tu reponds de maniere concise, professionnelle et chaleureuse en francais. Tu aides les clients avec leurs questions bancaires (comptes, cartes, virements, agences, horaires, produits). Si tu ne connais pas la reponse, oriente le client vers le service client au 011 76 32 29. Ne fournis jamais d''informations sensibles sur les comptes. Reponds en 2-3 phrases maximum.',
-        model VARCHAR(50) DEFAULT 'gpt-4',
+        model VARCHAR(50) DEFAULT 'gpt-4.1',
         chunk_count INT DEFAULT 5,
         similarity_threshold FLOAT DEFAULT 0.7,
         include_sources BOOLEAN DEFAULT true,
@@ -312,7 +312,7 @@ async function chat(message, contactId = null) {
       'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: config.model || process.env.OPENAI_MODEL || 'gpt-4',
+      model: config.model || process.env.OPENAI_MODEL || 'gpt-4.1',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message }
@@ -327,7 +327,7 @@ async function chat(message, contactId = null) {
 
   // Track token usage
   if (data.usage) {
-    logTokenUsage('chat', config.model || process.env.OPENAI_MODEL || 'gpt-4', data.usage);
+    logTokenUsage('chat', config.model || process.env.OPENAI_MODEL || 'gpt-4.1', data.usage);
   }
 
   let reply = data.choices?.[0]?.message?.content;
@@ -381,7 +381,7 @@ async function getConfig() {
       botName: 'Stella',
       systemPrompt: "Tu es Stella, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp. Tu reponds de maniere concise, professionnelle et chaleureuse en francais. Tu aides les clients avec leurs questions bancaires. Si tu ne connais pas la reponse, oriente le client vers le service client au 011 76 32 29. Ne fournis jamais d'informations sensibles sur les comptes. Reponds en 2-3 phrases maximum.",
       system_prompt: "Tu es Stella, l'assistant virtuel de BGFI Bank Gabon sur WhatsApp.",
-      model: 'gpt-4',
+      model: 'gpt-4.1',
       chunkCount: 5, chunk_count: 5,
       similarityThreshold: 0.7, similarity_threshold: 0.7,
       includeSources: true, include_sources: true,
@@ -392,7 +392,7 @@ async function getConfig() {
   try {
     rows = await prisma.$queryRawUnsafe(`SELECT * FROM rag_config WHERE id = 1`);
   } catch {
-    return { botName: 'Stella', model: 'gpt-4', chunkCount: 5, chunk_count: 5, similarityThreshold: 0.7, similarity_threshold: 0.7, includeSources: true, include_sources: true, fallbackResponse: true };
+    return { botName: 'Stella', model: 'gpt-4.1', chunkCount: 5, chunk_count: 5, similarityThreshold: 0.7, similarity_threshold: 0.7, includeSources: true, include_sources: true, fallbackResponse: true };
   }
   if (!rows[0]) return {};
 
@@ -491,14 +491,15 @@ async function getStats() {
 
 // Pricing per 1M tokens (USD)
 const TOKEN_PRICING_USD = {
-  'gpt-4': { input: 30, output: 60 },
-  'gpt-4-turbo': { input: 10, output: 30 },
+  'gpt-4.1': { input: 2.00, output: 8.00 },
   'gpt-4o': { input: 2.50, output: 10 },
   'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4': { input: 30, output: 60 },
+  'gpt-4-turbo': { input: 10, output: 30 },
   'text-embedding-3-small': { input: 0.02, output: 0 },
   'text-embedding-3-large': { input: 0.13, output: 0 }
 };
-const USD_TO_FCFA = 1200; // x2 x600
+const USD_TO_FCFA = 2800;
 
 async function getTokenStats() {
   await initialize();
@@ -564,7 +565,7 @@ async function getTokenStats() {
       byService: costByService,
       daily,
       pricing: {
-        model: process.env.OPENAI_MODEL || 'gpt-4',
+        model: process.env.OPENAI_MODEL || 'gpt-4.1',
         embeddingModel: EMBEDDING_MODEL,
         usdToFcfa: USD_TO_FCFA
       }
@@ -575,7 +576,7 @@ async function getTokenStats() {
       totals: { total_prompt: 0, total_completion: 0, total_tokens: 0, total_calls: 0, costUSD: 0, costFCFA: 0 },
       byService: [],
       daily: [],
-      pricing: { model: process.env.OPENAI_MODEL || 'gpt-4', embeddingModel: EMBEDDING_MODEL, usdToFcfa: USD_TO_FCFA }
+      pricing: { model: process.env.OPENAI_MODEL || 'gpt-4.1', embeddingModel: EMBEDDING_MODEL, usdToFcfa: USD_TO_FCFA }
     };
   }
 }
