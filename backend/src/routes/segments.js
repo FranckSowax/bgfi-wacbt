@@ -244,7 +244,7 @@ router.get('/:id/contacts', authenticate, async (req, res) => {
     }
 
     const criteriaWhere = buildWhereClause(segment.criteria);
-    const baseWhere = { AND: [{ status: 'ACTIVE', optedIn: true }, criteriaWhere] };
+    const baseWhere = { AND: [{ status: 'ACTIVE' }, criteriaWhere] };
 
     // Optional search filter
     const where = search
@@ -293,7 +293,7 @@ router.get('/:id/insights', authenticate, async (req, res) => {
     }
 
     const criteriaWhere = buildWhereClause(segment.criteria);
-    const baseWhere = { AND: [{ status: 'ACTIVE', optedIn: true }, criteriaWhere] };
+    const baseWhere = { AND: [{ status: 'ACTIVE' }, criteriaWhere] };
 
     const [byCity, byAccountType, byAgeRange, byGender, engagementAvg, total] = await Promise.all([
       prisma.contact.groupBy({ by: ['city'], where: { ...baseWhere, city: { not: null } }, _count: { city: true }, orderBy: { _count: { city: 'desc' } }, take: 8 }),

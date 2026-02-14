@@ -91,7 +91,7 @@ async function evaluateCount(prisma, criteria) {
   const criteriaWhere = buildWhereClause(criteria);
   const where = {
     AND: [
-      { status: 'ACTIVE', optedIn: true },
+      { status: 'ACTIVE' },
       criteriaWhere
     ]
   };
@@ -102,7 +102,7 @@ async function evaluateContacts(prisma, criteria) {
   const criteriaWhere = buildWhereClause(criteria);
   const where = {
     AND: [
-      { status: 'ACTIVE', optedIn: true },
+      { status: 'ACTIVE' },
       criteriaWhere
     ]
   };

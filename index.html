@@ -2439,7 +2439,7 @@
             const [addSearching, setAddSearching] = useState(false);
             const [addSaving, setAddSaving] = useState(false);
 
-            // Search contacts to add
+            // Search contacts to add (uses dedicated endpoint that excludes already-added contacts)
             const addSearchTimer = useRef(null);
             useEffect(() => {
                 if (!showAddContacts || addSearch.length < 2) { setAddResults([]); return; }
@@ -2447,7 +2447,7 @@
                 addSearchTimer.current = setTimeout(async () => {
                     setAddSearching(true);
                     try {
-                        const res = await api(`/contacts?search=${encodeURIComponent(addSearch)}&limit=10`);
+                        const res = await api(`/segments/${segment.id}/search-contacts?q=${encodeURIComponent(addSearch)}`);
                         setAddResults(res.data || []);
                     } catch { setAddResults([]); }
                     finally { setAddSearching(false); }
@@ -2463,14 +2463,15 @@
                 if (addSelected.length === 0) return;
                 setAddSaving(true);
                 try {
-                    await api(`/segments/${segment.id}/add-contacts`, { method: 'POST', body: JSON.stringify({ contactIds: addSelected.map(c => c.id) }) });
+                    const res = await api(`/segments/${segment.id}/add-contacts`, { method: 'POST', body: JSON.stringify({ contactIds: addSelected.map(c => c.id) }) });
                     setShowAddContacts(false);
                     setAddSearch('');
                     setAddResults([]);
                     setAddSelected([]);
                     onRefresh();
                     fetchContacts();
-                } catch (err) { alert(err.message); }
+                    alert((res.tagged || 0) + ' contact(s) ajoute(s) au segment');
+                } catch (err) { alert('Erreur: ' + err.message); }
                 finally { setAddSaving(false); }
             };
 
