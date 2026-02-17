@@ -170,18 +170,18 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
     const variableMatches = content.match(/\{\{(\d+)\}\}/g) || [];
     const variables = variableMatches.map((_, index) => `var${index + 1}`);
 
-    // Si header IMAGE et image locale, uploader vers Meta pour obtenir le header_handle
+    // Si header IMAGE/VIDEO et fichier local, uploader vers Meta pour obtenir le header_handle
     let headerHandle = null;
-    if (headerType === 'IMAGE' && headerContent) {
-      // Tenter l'upload vers Meta si WHATSAPP_APP_ID est configuré
+    if (['IMAGE', 'VIDEO'].includes(headerType) && headerContent) {
       const localPath = path.resolve(__dirname, '../../../public', headerContent.replace(/^\//, ''));
       const fs = require('fs');
       if (fs.existsSync(localPath)) {
-        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, 'image/jpeg');
+        const mimeType = headerType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, mimeType);
         if (uploadResult.success) {
           headerHandle = uploadResult.headerHandle;
         } else {
-          logger.warn('Media upload failed, template will be created without sample image', { error: uploadResult.error });
+          logger.warn('Media upload failed, template will be created without sample media', { error: uploadResult.error });
         }
       }
     }
@@ -319,11 +319,12 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
 
     // Upload media header if needed
     let headerHandle = null;
-    if (newHeaderType === 'IMAGE' && newHeaderContent) {
+    if (['IMAGE', 'VIDEO'].includes(newHeaderType) && newHeaderContent) {
       const localPath = path.resolve(__dirname, '../../../public', newHeaderContent.replace(/^\//, ''));
       const fs = require('fs');
       if (fs.existsSync(localPath)) {
-        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, 'image/jpeg');
+        const mimeType = newHeaderType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, mimeType);
         if (uploadResult.success) {
           headerHandle = uploadResult.headerHandle;
         } else {
