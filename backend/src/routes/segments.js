@@ -515,6 +515,53 @@ router.post('/:id/add-contacts', authenticate, async (req, res) => {
 });
 
 // ============================================
+// POST /api/segments/:id/remove-contacts - Retirer des contacts d'un segment
+// ============================================
+router.post('/:id/remove-contacts', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { contactIds } = req.body;
+
+    if (!contactIds || !Array.isArray(contactIds) || contactIds.length === 0) {
+      return res.status(400).json({ error: 'contactIds requis (tableau non vide)' });
+    }
+
+    const segment = await prisma.segment.findUnique({ where: { id } });
+    if (!segment) {
+      return res.status(404).json({ error: 'Segment non trouvé' });
+    }
+
+    const tagName = 'seg_' + segment.name.replace(/\s+/g, '_').toLowerCase();
+
+    let removed = 0;
+    for (const contactId of contactIds) {
+      const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { id: true, tags: true } });
+      if (contact && (contact.tags || []).includes(tagName)) {
+        await prisma.contact.update({
+          where: { id: contactId },
+          data: { tags: { set: (contact.tags || []).filter(t => t !== tagName) } }
+        });
+        removed++;
+      }
+    }
+
+    // Re-evaluate count
+    const criteria = segment.criteria || { operator: 'AND', rules: [] };
+    const contactCount = await evaluateCount(prisma, criteria);
+    await prisma.segment.update({
+      where: { id },
+      data: { contactCount, lastEvaluatedAt: new Date() }
+    });
+
+    logger.info('Contacts removed from segment', { segmentId: id, removed, total: contactIds.length });
+    res.json({ success: true, removed, newCount: contactCount });
+  } catch (error) {
+    logger.error('Error removing contacts from segment', { error: error.message });
+    res.status(500).json({ error: error.message || 'Erreur lors du retrait des contacts' });
+  }
+});
+
+// ============================================
 // GET /api/segments/:id/search-contacts - Recherche contacts hors segment
 // ============================================
 router.get('/:id/search-contacts', authenticate, async (req, res) => {

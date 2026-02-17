@@ -2475,6 +2475,16 @@
                 finally { setAddSaving(false); }
             };
 
+            const handleRemoveContact = async (contact) => {
+                if (!confirm('Retirer ' + (contact.name || contact.phone) + ' de ce segment ?')) return;
+                try {
+                    const res = await api(`/segments/${segment.id}/remove-contacts`, { method: 'POST', body: JSON.stringify({ contactIds: [contact.id] }) });
+                    onRefresh();
+                    fetchContacts();
+                    alert((res.removed || 0) + ' contact(s) retire(s) du segment');
+                } catch (err) { alert('Erreur: ' + err.message); }
+            };
+
             // Fetch contacts
             const fetchContacts = useCallback(async () => {
                 setLoadingContacts(true);
@@ -2606,6 +2616,7 @@
                                                     <th className="text-left py-3 px-3 font-medium text-gray-500">Compte</th>
                                                     <th className="text-left py-3 px-3 font-medium text-gray-500">Engagement</th>
                                                     <th className="text-left py-3 px-3 font-medium text-gray-500">Tags</th>
+                                                    <th className="text-right py-3 px-3 font-medium text-gray-500"></th>
                                                 </tr></thead>
                                                 <tbody>
                                                     {contacts.data.map(c => (
@@ -2626,6 +2637,11 @@
                                                             </td>
                                                             <td className="py-3 px-3">
                                                                 <div className="flex flex-wrap gap-1">{(c.tags || []).slice(0, 2).map((t, i) => <span key={i} className="text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600">{t}</span>)}</div>
+                                                            </td>
+                                                            <td className="py-3 px-3 text-right">
+                                                                <button onClick={() => handleRemoveContact(c)} className="text-red-400 hover:text-red-600 p-1" title="Retirer du segment">
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                </button>
                                                             </td>
                                                         </tr>
                                                     ))}
