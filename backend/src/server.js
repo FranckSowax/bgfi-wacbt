@@ -105,10 +105,29 @@ app.use((req, res) => {
   res.sendFile(path.join(rootDir, 'index.html'));
 });
 
+// Auto-migration: appliquer les colonnes manquantes au demarrage
+async function runAutoMigrations() {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const migrations = [
+      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedAt" TIMESTAMP(3)'
+    ];
+    for (const sql of migrations) {
+      await prisma.$executeRawUnsafe(sql);
+    }
+    logger.info('Auto-migrations applied successfully');
+    await prisma.$disconnect();
+  } catch (err) {
+    logger.warn('Auto-migration error (may be already applied)', { error: err.message });
+  }
+}
+
 // Start server
 app.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`Health: http://localhost:${PORT}/api/health`);
+  runAutoMigrations();
 });
 
 // === Tache planifiee : Rapport quotidien a 8h00 (Libreville UTC+1) ===
