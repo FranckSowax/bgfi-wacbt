@@ -226,9 +226,15 @@ router.delete('/:id', authenticate, authorize(['contact:delete']), async (req, r
   try {
     const { id } = req.params;
 
-    await prisma.contact.delete({
-      where: { id }
-    });
+    // Supprimer dans une transaction pour gérer les foreign keys
+    await prisma.$transaction([
+      // Supprimer les messages liés au contact
+      prisma.message.deleteMany({ where: { contactId: id } }),
+      // Détacher les sessions de chat (contactId est optionnel)
+      prisma.chatSession.updateMany({ where: { contactId: id }, data: { contactId: null } }),
+      // Supprimer le contact
+      prisma.contact.delete({ where: { id } })
+    ]);
 
     logger.info('Contact deleted', { contactId: id });
 
