@@ -4,7 +4,7 @@
   "description": "BGFI WhatsApp Marketing SaaS Backend",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "npx prisma migrate deploy && node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
     "lint": "eslint src/",
