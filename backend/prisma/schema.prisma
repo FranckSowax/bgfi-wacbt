@@ -233,7 +233,8 @@ model Message {
   // Status tracking
   status      MessageStatus @default(PENDING)
   externalId  String?       // WhatsApp message ID (wamid)
-  
+  trackingId  String?       @unique // UUID for click tracking redirect
+
   // Timestamps
   sentAt      DateTime?
   deliveredAt DateTime?

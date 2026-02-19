@@ -94,6 +94,51 @@ app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
+// ============================================
+// Tracking redirect: GET /t/:trackingId
+// Enregistre le clic puis redirige vers l'URL cible
+// ============================================
+app.get('/t/:trackingId', async (req, res) => {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const { trackingId } = req.params;
+
+    const message = await prisma.message.findFirst({
+      where: { trackingId },
+      include: { campaign: { select: { variables: true } } }
+    });
+
+    if (!message) {
+      await prisma.$disconnect();
+      return res.redirect(process.env.TRACKING_FALLBACK_URL || 'https://bgfixstudia.com/');
+    }
+
+    // Enregistrer le clic (une seule fois par message)
+    if (!message.clickedAt) {
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { clickedAt: new Date() }
+      });
+      if (message.campaignId) {
+        await prisma.campaign.update({
+          where: { id: message.campaignId },
+          data: { clicked: { increment: 1 } }
+        });
+      }
+      logger.info('Click tracked', { trackingId, campaignId: message.campaignId });
+    }
+
+    // Rediriger vers l'URL cible
+    const targetUrl = message.campaign?.variables?.buttonUrl || process.env.TRACKING_FALLBACK_URL || 'https://bgfixstudia.com/';
+    await prisma.$disconnect();
+    res.redirect(targetUrl);
+  } catch (err) {
+    logger.error('Tracking redirect error', { error: err.message, trackingId: req.params.trackingId });
+    res.redirect(process.env.TRACKING_FALLBACK_URL || 'https://bgfixstudia.com/');
+  }
+});
+
 // Error handling
 app.use(errorHandler);
 
@@ -111,7 +156,9 @@ async function runAutoMigrations() {
     const { PrismaClient } = require('@prisma/client');
     const prisma = new PrismaClient();
     const migrations = [
-      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedAt" TIMESTAMP(3)'
+      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedAt" TIMESTAMP(3)',
+      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "trackingId" TEXT',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "messages_trackingId_key" ON "messages"("trackingId")'
     ];
     for (const sql of migrations) {
       await prisma.$executeRawUnsafe(sql);

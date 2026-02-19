@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { randomUUID } = require('crypto');
 const whatsappService = require('./whatsapp');
 const { evaluateContacts } = require('./segmentEvaluator');
 const logger = require('../utils/logger');
@@ -163,14 +164,15 @@ class CampaignService {
 
     if (contacts.length === 0) throw new Error('Aucun contact trouvé pour ce segment');
 
-    // Créer les messages
+    // Créer les messages avec un trackingId unique pour le suivi des clics
     await prisma.message.createMany({
       data: contacts.map(contact => ({
         campaignId: campaign.id,
         contactId: contact.id,
         content: this.formatMessage(campaign.template.content, contact, campaign.variables),
         type: 'TEMPLATE',
-        status: 'PENDING'
+        status: 'PENDING',
+        trackingId: randomUUID()
       }))
     });
 
@@ -261,17 +263,23 @@ class CampaignService {
       try {
         // Send each message individually to track per-contact results
         for (const contact of batch) {
-          // Use WhatsApp template for broadcast (required to initiate conversations)
+          // Récupérer le trackingId du message pré-créé
+          const dbMsg = await prisma.message.findFirst({
+            where: { campaignId: campaign.id, contactId: contact.id },
+            select: { id: true, trackingId: true }
+          });
+
           const templateName = campaign.template.name;
           const language = campaign.template.language || 'fr';
-          const sendComponents = this.buildSendComponents(campaign.template, contact, campaign.variables, resolvedMediaId);
+          const sendComponents = this.buildSendComponents(campaign.template, contact, campaign.variables, resolvedMediaId, dbMsg?.trackingId);
 
           logger.info('Sending template', {
             campaignId: campaign.id,
             template: templateName,
             language,
             components: sendComponents.map(c => c.type),
-            contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*')
+            contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*'),
+            trackingId: dbMsg?.trackingId
           });
 
           const result = await whatsappService.sendTemplate(contact.phone, templateName, language, sendComponents);
@@ -453,8 +461,9 @@ class CampaignService {
    * @param {Object} contact - Contact object
    * @param {Object} variables - Campaign variables
    * @param {string|null} mediaId - Pre-uploaded WhatsApp media ID for header
+   * @param {string|null} trackingId - Unique tracking ID for click redirect
    */
-  buildSendComponents(template, contact, variables, mediaId = null) {
+  buildSendComponents(template, contact, variables, mediaId = null, trackingId = null) {
     const components = [];
 
     // HEADER component (image/video/document) - use uploaded media ID
@@ -475,15 +484,17 @@ class CampaignService {
       components.push({ type: 'body', parameters: bodyParams });
     }
 
-    // BUTTON components (dynamic URL suffix)
+    // BUTTON components (dynamic URL suffix → tracking redirect)
     if (template.buttons && Array.isArray(template.buttons)) {
       template.buttons.forEach((btn, index) => {
         if (btn.type === 'URL' && btn.url && btn.url.includes('{{1}}')) {
+          // Utiliser le trackingId comme suffixe dynamique pour le suivi des clics
+          const suffix = trackingId || (variables?.buttonUrl || '');
           components.push({
             type: 'button',
             sub_type: 'url',
             index: index,
-            parameters: [{ type: 'text', text: variables?.buttonUrl || '' }]
+            parameters: [{ type: 'text', text: suffix }]
           });
         }
       });

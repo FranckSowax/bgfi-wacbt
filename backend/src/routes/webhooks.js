@@ -131,45 +131,8 @@ async function handleIncomingMessage(message, contacts) {
       }
     }
 
-    // Track campaign engagement: si le contact repond/interagit apres avoir recu une campagne,
-    // comptabiliser comme un "clic" (engagement)
-    try {
-      const recentCampaignMsg = await prisma.message.findFirst({
-        where: {
-          contactId: dbContact.id,
-          campaignId: { not: null },
-          status: { in: ['DELIVERED', 'READ'] },
-          createdAt: { gte: new Date(Date.now() - 72 * 60 * 60 * 1000) } // 72h window
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, campaignId: true }
-      });
-
-      if (recentCampaignMsg) {
-        // Verifier qu'on n'a pas deja compte ce contact pour cette campagne
-        const alreadyCounted = await prisma.message.findFirst({
-          where: { id: recentCampaignMsg.id, clickedAt: { not: null } }
-        });
-
-        if (!alreadyCounted) {
-          await prisma.message.update({
-            where: { id: recentCampaignMsg.id },
-            data: { clickedAt: new Date() }
-          });
-          await prisma.campaign.update({
-            where: { id: recentCampaignMsg.campaignId },
-            data: { clicked: { increment: 1 } }
-          });
-          logger.info('Campaign click tracked', {
-            contactId: dbContact.id,
-            campaignId: recentCampaignMsg.campaignId,
-            messageType: message.type
-          });
-        }
-      }
-    } catch (clickErr) {
-      logger.warn('Error tracking campaign click', { error: clickErr.message });
-    }
+    // Note: Le tracking des clics est géré par le redirect /t/:trackingId (server.js)
+    // Les clics sur les boutons URL des templates passent par notre serveur de redirection
 
     // Chatbot automatique : repond a tous les messages texte entrants via RAG
     if (message.type === 'text' && message.text?.body) {
