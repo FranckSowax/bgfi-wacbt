@@ -96,6 +96,7 @@ model Template {
   category    TemplateCategory
   content     String
   variables   String[]         @default([])
+  variableMapping Json?        // {var1: "nom", var2: "prenom"} - default mapping for campaigns
   language    String           @default("fr")
   
   // Header (IMAGE, VIDEO, DOCUMENT, TEXT, or NONE)

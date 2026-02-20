@@ -173,7 +173,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // ============================================
 router.post('/', authenticate, authorize(['template:create']), async (req, res) => {
   try {
-    const { name, displayName, category, content, language = 'fr', headerType, headerContent, buttons, footer } = req.body;
+    const { name, displayName, category, content, language = 'fr', headerType, headerContent, buttons, footer, variables: variableMapping } = req.body;
 
     // Validation
     if (!name || !displayName || !category || !content) {
@@ -214,6 +214,7 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
         category: category.toUpperCase(),
         content,
         variables,
+        variableMapping: variableMapping && Object.keys(variableMapping).length > 0 ? variableMapping : undefined,
         language,
         headerType: headerType || 'NONE',
         headerContent: headerContent || null,

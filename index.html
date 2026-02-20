@@ -816,7 +816,7 @@
             const handleCreate = async () => {
                 setCreating(true);
                 try {
-                    const body = { name: form.name, type: form.type, templateId: form.templateId, scheduledAt: form.scheduledAt || undefined };
+                    const body = { name: form.name, type: form.type, templateId: form.templateId, scheduledAt: form.scheduledAt || undefined, variables: selTemplate?.variableMapping || undefined };
                     if (form.targetMode === 'segment' && form.segmentId) {
                         body.segmentId = form.segmentId;
                     } else if (form.targetMode === 'builder') {
@@ -900,9 +900,28 @@
                                 <div className="space-y-4">
                                     <Select label="Template approuve" value={form.templateId} onChange={v => setForm({...form, templateId: v})} options={[{ value: '', label: 'Selectionner un template...' }, ...templates.map(t => ({ value: t.id, label: (t.displayName || t.name) + ' (' + (t.category || '') + ')' }))]} />
                                     {selTemplate && (
-                                        <div className="bg-gray-50 rounded-xl p-4">
+                                        <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                                             <p className="text-sm font-medium text-gray-700 mb-2">Apercu :</p>
                                             <p className="text-sm text-gray-600 whitespace-pre-wrap">{selTemplate.content}</p>
+                                            {selTemplate.variableMapping && Object.keys(selTemplate.variableMapping).length > 0 && (
+                                                <div className="border-t border-gray-200 pt-3 mt-3">
+                                                    <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5"><Icons.Tag className="w-3.5 h-3.5" /> Variables configurees :</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {Object.entries(selTemplate.variableMapping).filter(([k]) => !k.endsWith('_custom')).map(([key, val]) => {
+                                                            const num = key.replace('var', '');
+                                                            const labels = { nom: 'Nom complet', prenom: 'Prenom', email: 'Email', phone: 'Telephone', '__custom': 'Texte fixe' };
+                                                            const customVal = val === '__custom' ? selTemplate.variableMapping[key + '_custom'] : null;
+                                                            return (
+                                                                <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg text-xs">
+                                                                    <span className="font-mono font-bold text-blue-700">{`{{${num}}}`}</span>
+                                                                    <span className="text-gray-400">=</span>
+                                                                    <span className="text-gray-700 font-medium">{customVal || labels[val] || val}</span>
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1231,7 +1250,7 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Parametres RAG">
                                 <div className="space-y-6">
-                                    <Select label="Modele LLM" value="gpt-4.1" options={[{ value: 'gpt-4.1', label: 'GPT-4.1 (Recommande)' }, { value: 'gpt-4o', label: 'GPT-4o' }, { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }]} />
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Modele LLM</label><div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg"><span className="text-sm font-medium text-gray-900">GPT-4</span><span className="ml-auto px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">Actif</span></div></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-2">Nombre de chunks (contexte)</label><input type="range" min="1" max="10" defaultValue="5" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>1</span><span>5</span><span>10</span></div></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-2">Seuil de similarite</label><input type="range" min="0" max="100" defaultValue="75" className="w-full" /><div className="flex justify-between text-xs text-gray-500 mt-1"><span>0%</span><span>75%</span><span>100%</span></div></div>
                                     <div className="flex items-center gap-3"><input type="checkbox" id="citations" defaultChecked className="w-4 h-4 text-bgfi-primary rounded" /><label htmlFor="citations" className="text-sm text-gray-700">Inclure les citations des sources</label></div>
@@ -3100,7 +3119,7 @@
         const TemplatesView = () => {
             const [showCreateModal, setShowCreateModal] = useState(false);
             const { data, loading, error, refetch } = useApi('/templates?limit=100');
-            const [form, setForm] = useState({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '' });
+            const [form, setForm] = useState({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '', variables: {} });
             const [creating, setCreating] = useState(false);
 
             // Filters & search
@@ -3144,9 +3163,10 @@
             const handleCreate = async () => {
                 setCreating(true);
                 try {
-                    const payload = { ...form, buttons: form.buttons.length > 0 ? form.buttons : undefined, footer: form.footer || undefined };
+                    const cleanVars = form.variables && Object.keys(form.variables).length > 0 ? form.variables : undefined;
+                    const payload = { ...form, variables: cleanVars, buttons: form.buttons.length > 0 ? form.buttons : undefined, footer: form.footer || undefined };
                     await api('/templates', { method: 'POST', body: JSON.stringify(payload) });
-                    setShowCreateModal(false); setForm({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '' }); refetch();
+                    setShowCreateModal(false); setForm({ name: '', displayName: '', category: '', content: '', language: 'fr', headerType: 'NONE', headerContent: '', buttons: [], footer: '', variables: {} }); refetch();
                 } catch (err) { alert(err.message); }
                 finally { setCreating(false); }
             };
@@ -3453,8 +3473,84 @@
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Contenu du message (Body)</label>
-                                        <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" placeholder="Bonjour {{1}} ! ..." value={form.content} onChange={(e) => setForm({...form, content: e.target.value})} />
-                                        <p className="text-xs text-gray-500 mt-2">Utilisez {'{{1}}'}, {'{{2}}'}, etc. pour les variables.</p>
+                                        <textarea id="tpl-body-textarea" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary sm:text-sm px-4 py-3 border" rows="6" placeholder="Bonjour {{1}}, bienvenue chez BGFI Bank ! Votre compte {{2}} est actif." value={form.content} onChange={(e) => setForm({...form, content: e.target.value})} />
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            <span className="text-xs text-gray-500 mr-1 py-1">Inserer :</span>
+                                            {['{{1}}', '{{2}}', '{{3}}'].map(v => (
+                                                <button key={v} type="button" className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-mono font-medium hover:bg-blue-100 transition-colors" onClick={() => {
+                                                    const ta = document.getElementById('tpl-body-textarea');
+                                                    if (ta) { const s = ta.selectionStart, e2 = ta.selectionEnd; const nv = form.content.substring(0, s) + v + form.content.substring(e2); setForm({...form, content: nv}); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + v.length; }, 0); }
+                                                    else setForm({...form, content: form.content + v});
+                                                }}>{v}</button>
+                                            ))}
+                                        </div>
+
+                                        {/* Variable mapping panel */}
+                                        {(() => {
+                                            const detected = (form.content.match(/\{\{(\d+)\}\}/g) || []).filter((v, i, a) => a.indexOf(v) === i).sort();
+                                            if (detected.length === 0) return null;
+                                            const varOptions = [
+                                                { value: 'nom', label: 'Nom complet du contact', example: 'Franck Sowax' },
+                                                { value: 'prenom', label: 'Prenom du contact', example: 'Franck' },
+                                                { value: 'email', label: 'Email du contact', example: 'franck@bgfi.ga' },
+                                                { value: 'phone', label: 'Telephone du contact', example: '+241 07 48 87 16' },
+                                            ];
+                                            return (
+                                                <div className="mt-3 border border-blue-200 rounded-xl overflow-hidden">
+                                                    <div className="bg-blue-50 px-4 py-2.5 flex items-center gap-2 border-b border-blue-200">
+                                                        <Icons.Tag className="w-4 h-4 text-blue-600" />
+                                                        <span className="text-sm font-semibold text-blue-800">Variables detectees ({detected.length})</span>
+                                                    </div>
+                                                    <div className="p-4 space-y-3 bg-white">
+                                                        <p className="text-xs text-gray-500">Chaque variable sera remplacee par la donnee du contact lors de l'envoi de campagne.</p>
+                                                        {detected.map(varTag => {
+                                                            const num = varTag.replace(/[{}]/g, '');
+                                                            const varKey = `var${num}`;
+                                                            const currentVal = (form.variables || {})[varKey] || '';
+                                                            const selectedOpt = varOptions.find(o => o.value === currentVal);
+                                                            return (
+                                                                <div key={varTag} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                                                                    <span className="font-mono text-sm font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded w-fit">{varTag}</span>
+                                                                    <Icons.ChevronRight className="w-4 h-4 text-gray-400 hidden sm:block" />
+                                                                    <select className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary text-sm px-3 py-2 border" value={currentVal}
+                                                                        onChange={e => setForm({...form, variables: {...(form.variables || {}), [varKey]: e.target.value}})}>
+                                                                        <option value="">-- Choisir la donnee --</option>
+                                                                        {varOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                        <option value="__custom">Texte fixe (identique pour tous)</option>
+                                                                    </select>
+                                                                    {currentVal === '__custom' && (
+                                                                        <input type="text" className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-bgfi-primary focus:ring-bgfi-primary text-sm px-3 py-2 border" placeholder="Valeur fixe..."
+                                                                            value={(form.variables || {})[`${varKey}_custom`] || ''} onChange={e => setForm({...form, variables: {...(form.variables || {}), [`${varKey}_custom`]: e.target.value}})} />
+                                                                    )}
+                                                                    {selectedOpt && <span className="text-xs text-gray-400 italic">ex: {selectedOpt.example}</span>}
+                                                                </div>
+                                                            );
+                                                        })}
+
+                                                        {/* Live preview */}
+                                                        <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                                            <div className="flex items-center gap-1.5 mb-1.5">
+                                                                <Icons.Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                                                <span className="text-xs font-semibold text-emerald-700">Apercu pour un contact exemple</span>
+                                                            </div>
+                                                            <p className="text-sm text-emerald-900">{(() => {
+                                                                let preview = form.content;
+                                                                detected.forEach(varTag => {
+                                                                    const num = varTag.replace(/[{}]/g, '');
+                                                                    const varKey = `var${num}`;
+                                                                    const val = (form.variables || {})[varKey] || '';
+                                                                    let display = varTag;
+                                                                    if (val === '__custom') display = (form.variables || {})[`${varKey}_custom`] || varTag;
+                                                                    else if (val) { const opt = varOptions.find(o => o.value === val); display = opt ? opt.example : val; }
+                                                                    preview = preview.replace(varTag, display);
+                                                                });
+                                                                return preview || '...';
+                                                            })()}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     <Input label="Pied de page (Footer) - optionnel" placeholder="BGFI Bank - Votre partenaire pour l'avenir" value={form.footer} onChange={v => setForm({...form, footer: v})} />

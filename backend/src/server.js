@@ -190,7 +190,8 @@ async function runAutoMigrations() {
       'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedAt" TIMESTAMP(3)',
       'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "trackingId" TEXT',
       'CREATE UNIQUE INDEX IF NOT EXISTS "messages_trackingId_key" ON "messages"("trackingId")',
-      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedButtons" JSONB'
+      'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedButtons" JSONB',
+      'ALTER TABLE "templates" ADD COLUMN IF NOT EXISTS "variableMapping" JSONB'
     ];
     for (const sql of migrations) {
       await prisma.$executeRawUnsafe(sql);
