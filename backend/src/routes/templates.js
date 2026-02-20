@@ -1,14 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const multer = require('multer');
 const { PrismaClient } = require('@prisma/client');
 
 const { authenticate, authorize } = require('../middleware/auth');
 const whatsappService = require('../services/whatsapp');
+const supabase = require('../lib/supabase');
 const logger = require('../utils/logger');
 const { templatesTotal } = require('../utils/metrics');
 
 const prisma = new PrismaClient();
+
+// Multer: stockage en memoire (max 50 MB)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Format non supporte. Formats acceptes: JPEG, PNG, WebP, MP4'));
+  }
+});
 
 // Helper: auto-convertir les boutons URL en URL de tracking
 // Stocke l'URL originale dans redirectUrl et remplace par l'URL de tracking
@@ -26,6 +39,61 @@ function applyTrackingToButtons(buttons) {
     return btn;
   });
 }
+
+// ============================================
+// POST /api/templates/upload-media - Upload image/video vers Supabase Storage
+// ============================================
+router.post('/upload-media', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Aucun fichier fourni' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase Storage non configure (SUPABASE_URL / SUPABASE_SERVICE_KEY manquants)' });
+    }
+
+    const file = req.file;
+    const ext = file.originalname.split('.').pop().toLowerCase();
+    const timestamp = Date.now();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_{2,}/g, '_');
+    const storagePath = `${timestamp}_${safeName}`;
+
+    // Upload vers Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('templates-media')
+      .upload(storagePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false
+      });
+
+    if (error) {
+      logger.error('Supabase Storage upload error', { error: error.message });
+      return res.status(500).json({ error: 'Erreur upload: ' + error.message });
+    }
+
+    // URL publique
+    const { data: urlData } = supabase.storage
+      .from('templates-media')
+      .getPublicUrl(storagePath);
+
+    const publicUrl = urlData.publicUrl;
+
+    logger.info('Media uploaded to Supabase Storage', { path: storagePath, size: file.size, type: file.mimetype });
+
+    res.json({
+      success: true,
+      url: publicUrl,
+      path: storagePath,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+  } catch (error) {
+    logger.error('Upload media error', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ============================================
 // GET /api/templates - Lister les templates
@@ -187,18 +255,48 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
     const variableMatches = content.match(/\{\{(\d+)\}\}/g) || [];
     const variables = variableMatches.map((_, index) => `var${index + 1}`);
 
-    // Si header IMAGE/VIDEO et fichier local, uploader vers Meta pour obtenir le header_handle
+    // Si header IMAGE/VIDEO, uploader vers Meta pour obtenir le header_handle
+    // Supporte: fichier local OU URL (Supabase Storage)
     let headerHandle = null;
     if (['IMAGE', 'VIDEO'].includes(headerType) && headerContent) {
-      const localPath = path.resolve(__dirname, '../../../public', headerContent.replace(/^\//, ''));
       const fs = require('fs');
-      if (fs.existsSync(localPath)) {
-        const mimeType = headerType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
-        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, mimeType);
+      const axios = require('axios');
+      const os = require('os');
+      const mimeType = headerType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+
+      let filePath = null;
+      let tempFile = false;
+
+      if (headerContent.startsWith('http://') || headerContent.startsWith('https://')) {
+        // URL (Supabase Storage ou autre) — telecharger en fichier temporaire
+        try {
+          const response = await axios.get(headerContent, { responseType: 'arraybuffer', timeout: 60000 });
+          const ext = headerType === 'VIDEO' ? '.mp4' : '.jpg';
+          filePath = path.join(os.tmpdir(), `bgfi_upload_${Date.now()}${ext}`);
+          fs.writeFileSync(filePath, response.data);
+          tempFile = true;
+          logger.info('Media downloaded from URL for Meta upload', { url: headerContent.substring(0, 80), size: response.data.length });
+        } catch (dlErr) {
+          logger.warn('Failed to download media from URL', { url: headerContent, error: dlErr.message });
+        }
+      } else {
+        // Chemin local dans /public
+        const localPath = path.resolve(__dirname, '../../../public', headerContent.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) {
+          filePath = localPath;
+        }
+      }
+
+      if (filePath) {
+        const uploadResult = await whatsappService.uploadMediaForTemplate(filePath, mimeType);
         if (uploadResult.success) {
           headerHandle = uploadResult.headerHandle;
         } else {
-          logger.warn('Media upload failed, template will be created without sample media', { error: uploadResult.error });
+          logger.warn('Media upload to Meta failed', { error: uploadResult.error });
+        }
+        // Nettoyer le fichier temporaire
+        if (tempFile) {
+          try { fs.unlinkSync(filePath); } catch {}
         }
       }
     }
@@ -339,19 +437,36 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
     const newButtons = applyTrackingToButtons(rawButtons);
     const newFooter = footer !== undefined ? footer : source.footer;
 
-    // Upload media header if needed
+    // Upload media header if needed (local file or URL)
     let headerHandle = null;
     if (['IMAGE', 'VIDEO'].includes(newHeaderType) && newHeaderContent) {
-      const localPath = path.resolve(__dirname, '../../../public', newHeaderContent.replace(/^\//, ''));
       const fs = require('fs');
-      if (fs.existsSync(localPath)) {
-        const mimeType = newHeaderType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
-        const uploadResult = await whatsappService.uploadMediaForTemplate(localPath, mimeType);
-        if (uploadResult.success) {
-          headerHandle = uploadResult.headerHandle;
-        } else {
-          logger.warn('Media upload failed for duplicate', { error: uploadResult.error });
+      const axios = require('axios');
+      const os = require('os');
+      const mimeType = newHeaderType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+      let filePath = null;
+      let tempFile = false;
+
+      if (newHeaderContent.startsWith('http://') || newHeaderContent.startsWith('https://')) {
+        try {
+          const response = await axios.get(newHeaderContent, { responseType: 'arraybuffer', timeout: 60000 });
+          const ext = newHeaderType === 'VIDEO' ? '.mp4' : '.jpg';
+          filePath = path.join(os.tmpdir(), `bgfi_dup_${Date.now()}${ext}`);
+          fs.writeFileSync(filePath, response.data);
+          tempFile = true;
+        } catch (dlErr) {
+          logger.warn('Failed to download media for duplicate', { error: dlErr.message });
         }
+      } else {
+        const localPath = path.resolve(__dirname, '../../../public', newHeaderContent.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) filePath = localPath;
+      }
+
+      if (filePath) {
+        const uploadResult = await whatsappService.uploadMediaForTemplate(filePath, mimeType);
+        if (uploadResult.success) headerHandle = uploadResult.headerHandle;
+        else logger.warn('Media upload failed for duplicate', { error: uploadResult.error });
+        if (tempFile) { try { fs.unlinkSync(filePath); } catch {} }
       }
     }
 
