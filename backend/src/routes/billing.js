@@ -12,9 +12,9 @@ const prisma = new PrismaClient();
 // Prix fixes en FCFA (regle: USD x 2 x 600, arrondi)
 // ============================================
 const PRICING_FCFA = {
-  MARKETING: 35,
-  UTILITY: 11,
-  AUTHENTICATION: 11,
+  MARKETING: 40,
+  UTILITY: 20,
+  AUTHENTICATION: 20,
   SERVICE: 0
 };
 
