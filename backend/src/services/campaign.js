@@ -278,7 +278,7 @@ class CampaignService {
             campaignId: campaign.id,
             template: templateName,
             language,
-            components: sendComponents.map(c => c.type),
+            components: JSON.stringify(sendComponents),
             contactPhone: contact.phone.replace(/\d(?=\d{4})/g, '*'),
             trackingId: dbMsg?.trackingId
           });
@@ -481,6 +481,14 @@ class CampaignService {
         case 'prenom': value = contact.name?.split(' ')[0] || 'Cher client'; break;
         default: value = variables?.[varName] || '';
       }
+      // If no mapping was configured, auto-detect from contact fields
+      if (!value && !varName) {
+        // First variable is typically the client name
+        if (index === 0) value = contact.name || 'Cher(e) client(e)';
+        else value = 'Cher(e) client(e)';
+      }
+      // Meta rejects empty parameter values (#131008)
+      if (!value) value = 'Cher(e) client(e)';
       return { type: 'text', text: value };
     });
   }
@@ -519,11 +527,11 @@ class CampaignService {
       template.buttons.forEach((btn, index) => {
         if (btn.type === 'URL' && btn.url && btn.url.includes('{{1}}')) {
           // trackingId/buttonIndex pour identifier quel bouton est cliqué
-          const suffix = trackingId ? `${trackingId}/${index}` : (variables?.buttonUrl || '');
+          const suffix = trackingId ? `${trackingId}/${index}` : (variables?.buttonUrl || 'click');
           components.push({
             type: 'button',
             sub_type: 'url',
-            index: index,
+            index: String(index),
             parameters: [{ type: 'text', text: suffix }]
           });
         }
