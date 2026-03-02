@@ -291,7 +291,7 @@ class WhatsAppCloudService {
   /**
    * Récupérer l'URL de l'image header d'un template approuvé depuis Meta
    */
-  async getTemplateImageUrl(templateName) {
+  async getTemplateMediaUrl(templateName) {
     try {
       const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
       if (!wabaId) return null;
@@ -304,11 +304,17 @@ class WhatsAppCloudService {
       if (!template) return null;
 
       const headerComp = template.components?.find(c => c.type === 'HEADER');
+      // header_url works for both IMAGE and VIDEO templates
       return headerComp?.example?.header_url?.[0] || null;
     } catch (error) {
-      logger.error('Erreur récupération image URL template', { templateName, error: error.message });
+      logger.error('Erreur récupération media URL template', { templateName, error: error.message });
       return null;
     }
+  }
+
+  // Backward-compatible alias
+  async getTemplateImageUrl(templateName) {
+    return this.getTemplateMediaUrl(templateName);
   }
 
   /**
@@ -317,28 +323,45 @@ class WhatsAppCloudService {
    */
   async downloadAndUploadMedia(imageUrl, mimeType = 'image/jpeg') {
     try {
-      // Step 1: Download the image
-      logger.info('Downloading image for media upload', { url: imageUrl.substring(0, 80) + '...' });
-      const imageResponse = await axios.get(imageUrl, {
+      // Step 1: Download the media (image or video)
+      logger.info('Downloading media for upload', { url: imageUrl.substring(0, 80) + '...' });
+
+      // Only send Meta auth headers for Meta/Facebook CDN URLs
+      const isMetaUrl = imageUrl.includes('whatsapp.net') || imageUrl.includes('facebook.com') || imageUrl.includes('fbcdn.net');
+      const downloadHeaders = isMetaUrl
+        ? { 'Authorization': `OAuth ${this.accessToken}`, 'User-Agent': 'WhatsApp/2.0' }
+        : { 'User-Agent': 'Mozilla/5.0' };
+
+      const mediaResponse = await axios.get(imageUrl, {
         responseType: 'arraybuffer',
-        timeout: 30000,
-        headers: {
-          'Authorization': `OAuth ${this.accessToken}`,
-          'User-Agent': 'WhatsApp/2.0'
-        }
+        timeout: 60000,
+        headers: downloadHeaders
       });
 
-      const imageBuffer = Buffer.from(imageResponse.data);
-      const detectedMime = imageResponse.headers['content-type'] || mimeType;
+      const mediaBuffer = Buffer.from(mediaResponse.data);
+      const detectedMime = mediaResponse.headers['content-type'] || mimeType;
+
+      // Auto-detect mime type from URL extension if content-type is generic
+      let finalMime = detectedMime;
+      if (detectedMime === 'application/octet-stream' || detectedMime === 'binary/octet-stream') {
+        if (imageUrl.match(/\.mp4/i)) finalMime = 'video/mp4';
+        else if (imageUrl.match(/\.jpg|\.jpeg/i)) finalMime = 'image/jpeg';
+        else if (imageUrl.match(/\.png/i)) finalMime = 'image/png';
+        else if (imageUrl.match(/\.webp/i)) finalMime = 'image/webp';
+      }
+
+      // Determine filename based on media type
+      const isVideo = finalMime.startsWith('video/');
+      const filename = isVideo ? 'header_video.mp4' : 'header_image.jpg';
 
       // Step 2: Upload to WhatsApp Media API
       const FormData = require('form-data');
       const form = new FormData();
       form.append('messaging_product', 'whatsapp');
-      form.append('type', detectedMime);
-      form.append('file', imageBuffer, {
-        filename: 'header_image.jpg',
-        contentType: detectedMime
+      form.append('type', finalMime);
+      form.append('file', mediaBuffer, {
+        filename,
+        contentType: finalMime
       });
 
       const uploadResponse = await axios.post(
@@ -349,16 +372,16 @@ class WhatsAppCloudService {
             ...form.getHeaders(),
             'Authorization': `Bearer ${this.accessToken}`
           },
-          timeout: 60000
+          timeout: 120000
         }
       );
 
       const mediaId = uploadResponse.data?.id;
-      logger.info('Media uploaded successfully', { mediaId });
+      logger.info('Media uploaded successfully', { mediaId, mime: finalMime, size: mediaBuffer.length });
       return { success: true, mediaId };
     } catch (error) {
       const errMsg = error.response?.data?.error?.message || error.message;
-      logger.error('Erreur download+upload media', { error: errMsg, status: error.response?.status });
+      logger.error('Erreur download+upload media', { error: errMsg, status: error.response?.status, url: imageUrl?.substring(0, 80) });
       return { success: false, error: errMsg };
     }
   }

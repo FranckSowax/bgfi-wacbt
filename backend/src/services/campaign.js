@@ -242,11 +242,12 @@ class CampaignService {
         }
       }
 
-      // Download the image and upload to WhatsApp Media API to get a reusable media_id
+      // Download the media and upload to WhatsApp Media API to get a reusable media_id
       if (imageUrl) {
-        logger.info('Uploading template header media to WhatsApp', { template: campaign.template.name });
+        const mediaMime = campaign.template.headerType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+        logger.info('Uploading template header media to WhatsApp', { template: campaign.template.name, headerType: campaign.template.headerType, mime: mediaMime });
         try {
-          const uploadResult = await whatsappService.downloadAndUploadMedia(imageUrl);
+          const uploadResult = await whatsappService.downloadAndUploadMedia(imageUrl, mediaMime);
           if (uploadResult.success) {
             resolvedMediaId = uploadResult.mediaId;
             logger.info('Media ready for campaign', { template: campaign.template.name, mediaId: resolvedMediaId });
