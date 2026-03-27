@@ -647,14 +647,27 @@ router.post('/sync-all', authenticate, async (req, res) => {
 
       const existing = await prisma.template.findFirst({ where: { name: mt.name } });
       if (existing) {
+        // Preserve Supabase URLs (stable) - don't overwrite with Meta CDN URLs (temporary)
+        const hasStableUrl = existing.headerContent && existing.headerContent.includes('supabase.co');
+        const syncHeaderContent = hasStableUrl ? existing.headerContent : headerContent;
+
+        // Preserve redirectUrl in buttons if already set
+        const syncButtons = buttons?.map((btn, i) => {
+          const existingBtn = Array.isArray(existing.buttons) ? existing.buttons[i] : null;
+          if (existingBtn?.redirectUrl && !btn.redirectUrl) {
+            return { ...btn, redirectUrl: existingBtn.redirectUrl };
+          }
+          return btn;
+        }) || buttons;
+
         await prisma.template.update({
           where: { id: existing.id },
           data: {
             status: mt.status.toUpperCase(),
             metaId: mt.id,
             headerType,
-            headerContent,
-            buttons,
+            headerContent: syncHeaderContent,
+            buttons: syncButtons,
             footer,
             approvedAt: mt.status === 'APPROVED' ? (existing.approvedAt || new Date()) : null,
             rejectedAt: mt.status === 'REJECTED' ? new Date() : null,
