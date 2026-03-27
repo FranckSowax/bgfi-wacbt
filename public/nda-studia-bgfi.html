@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDA - Studia Academy / BGFIBank</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @page {
+            size: A4;
+            margin: 25mm 20mm;
+        }
+
+        body {
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.65;
+            color: #1a1a1a;
+            background: #f0f0f0;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 20px auto;
+            background: white;
+            padding: 30mm 25mm;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        @media print {
+            body { background: white; }
+            .page { margin: 0; padding: 0; box-shadow: none; width: auto; min-height: auto; }
+            .page-break { page-break-before: always; }
+            .no-print { display: none; }
+        }
+
+        /* Header */
+        .doc-header {
+            text-align: center;
+            border-bottom: 3px double #003366;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        .doc-header .parties {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .doc-header .party {
+            text-align: center;
+            flex: 1;
+        }
+
+        .doc-header .party-name {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 13pt;
+            font-weight: 700;
+            color: #003366;
+        }
+
+        .doc-header .party-sub {
+            font-size: 9pt;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .doc-header .separator {
+            font-size: 10pt;
+            color: #999;
+            padding: 0 15px;
+            font-style: italic;
+        }
+
+        .doc-title {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 16pt;
+            font-weight: 700;
+            color: #003366;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 15px 0 5px;
+        }
+
+        .doc-subtitle {
+            font-size: 10pt;
+            color: #666;
+            font-style: italic;
+        }
+
+        .doc-ref {
+            font-size: 9pt;
+            color: #999;
+            margin-top: 8px;
+        }
+
+        /* Content */
+        h2 {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 12pt;
+            font-weight: 700;
+            color: #003366;
+            margin: 25px 0 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        h2 .article-num {
+            color: #0066aa;
+        }
+
+        p, li {
+            text-align: justify;
+            margin-bottom: 8px;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            margin-bottom: 5px;
+        }
+
+        .between {
+            background: #f8f9fa;
+            border-left: 3px solid #003366;
+            padding: 15px 20px;
+            margin: 20px 0;
+            font-size: 10.5pt;
+        }
+
+        .between strong {
+            color: #003366;
+        }
+
+        .highlight {
+            background: #fffde7;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        /* Signature block */
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+            gap: 40px;
+        }
+
+        .sig-block {
+            flex: 1;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .sig-block .sig-title {
+            font-size: 9pt;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .sig-block .sig-company {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 11pt;
+            font-weight: 700;
+            color: #003366;
+            margin-bottom: 3px;
+        }
+
+        .sig-block .sig-name {
+            font-size: 10pt;
+            color: #333;
+        }
+
+        .sig-block .sig-role {
+            font-size: 9pt;
+            color: #888;
+            font-style: italic;
+        }
+
+        .sig-block .sig-space {
+            height: 80px;
+            border-bottom: 1px dotted #ccc;
+            margin: 15px 0;
+        }
+
+        .sig-block .sig-date {
+            font-size: 9pt;
+            color: #888;
+            margin-top: 10px;
+        }
+
+        .sig-block .sig-date span {
+            border-bottom: 1px dotted #ccc;
+            padding: 0 60px;
+        }
+
+        /* Footer */
+        .doc-footer {
+            margin-top: 40px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 8.5pt;
+            color: #999;
+            text-align: center;
+        }
+
+        /* Print button */
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #003366;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .print-btn:hover {
+            background: #004488;
+        }
+    </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">Imprimer / PDF</button>
+
+<div class="page">
+
+    <!-- HEADER -->
+    <div class="doc-header">
+        <div class="parties">
+            <div class="party">
+                <div class="party-name">STUDIA ACADEMY</div>
+                <div class="party-sub">Conseil & Solutions Digitales</div>
+            </div>
+            <div class="separator">&mdash; et &mdash;</div>
+            <div class="party">
+                <div class="party-name">BGFI BANK</div>
+                <div class="party-sub">Groupe BGFIBank S.A.</div>
+            </div>
+        </div>
+        <div class="doc-title">Accord de Confidentialite</div>
+        <div class="doc-subtitle">Non-Disclosure Agreement (NDA)</div>
+        <div class="doc-ref">Ref. NDA-STUDIA-BGFI-2026-001 &bull; Etabli le 27 fevrier 2026</div>
+    </div>
+
+    <!-- ENTRE LES SOUSSIGNES -->
+    <div class="between">
+        <p><strong>ENTRE LES SOUSSIGNES :</strong></p>
+        <p style="margin-top:10px;">
+            <strong>STUDIA ACADEMY</strong>, societe de droit gabonais, specialisee dans le conseil et le developpement de solutions digitales, representee par son Directeur General,<br>
+            ci-apres denommee <strong>&laquo; La Partie Divulgatrice &raquo;</strong> ou <strong>&laquo; STUDIA &raquo;</strong>,
+        </p>
+        <p style="margin-top:10px;">D'une part,</p>
+        <p style="margin-top:10px;">
+            <strong>BGFI BANK S.A.</strong>, etablissement bancaire de droit gabonais, dont le siege social est situe a Libreville, Boulevard de l'Independance, representee par son Directeur General ou toute personne dument habilitee,<br>
+            ci-apres denommee <strong>&laquo; La Partie Receptrice &raquo;</strong> ou <strong>&laquo; BGFI &raquo;</strong>,
+        </p>
+        <p style="margin-top:10px;">D'autre part,</p>
+        <p style="margin-top:10px;">Ci-apres collectivement denommees <strong>&laquo; Les Parties &raquo;</strong>.</p>
+    </div>
+
+    <!-- PREAMBULE -->
+    <h2><span class="article-num">Preambule</span></h2>
+    <p>
+        Dans le cadre d'une presentation commerciale et technique, STUDIA souhaite presenter a la Direction Generale de BGFI une solution logicielle de gestion de campagnes marketing et de communication client via la plateforme WhatsApp Business (ci-apres <strong>&laquo; la Solution &raquo;</strong>).
+    </p>
+    <p>
+        Cette presentation implique la divulgation d'informations confidentielles relatives a l'architecture technique, aux fonctionnalites, au code source, aux algorithmes, aux interfaces utilisateur, aux modeles de donnees et a la strategie commerciale de STUDIA.
+    </p>
+    <p>
+        Les Parties conviennent de ce qui suit afin de proteger les informations confidentielles echangees dans le cadre de cette presentation et des discussions qui pourraient en decouler.
+    </p>
+
+    <!-- ARTICLE 1 -->
+    <h2><span class="article-num">Article 1</span> &mdash; Objet</h2>
+    <p>
+        Le present accord a pour objet de definir les conditions dans lesquelles les Parties s'engagent a proteger les informations confidentielles echangees dans le cadre de :
+    </p>
+    <ul>
+        <li>La presentation de la Solution de gestion de campagnes WhatsApp Business developpee par STUDIA ;</li>
+        <li>Les discussions et negociations pouvant mener a un partenariat commercial ou a un contrat de licence ;</li>
+        <li>Tout echange de documents, demonstrations, prototypes ou donnees techniques y afferents.</li>
+    </ul>
+
+    <!-- ARTICLE 2 -->
+    <h2><span class="article-num">Article 2</span> &mdash; Definition des Informations Confidentielles</h2>
+    <p>Sont considerees comme <strong>Informations Confidentielles</strong> au sens du present accord, l'ensemble des informations, sous quelque forme que ce soit (ecrite, orale, visuelle, electronique), communiquees par STUDIA a BGFI, incluant notamment :</p>
+    <ul>
+        <li><strong>Informations techniques :</strong> architecture logicielle, code source, algorithmes, bases de donnees, API, interfaces utilisateur, maquettes et prototypes ;</li>
+        <li><strong>Informations commerciales :</strong> modele economique, grille tarifaire, strategie de monetisation, positionnement concurrentiel, liste de clients ;</li>
+        <li><strong>Propriete intellectuelle :</strong> tout element relevant du droit d'auteur, du droit des brevets, des marques ou du savoir-faire de STUDIA ;</li>
+        <li><strong>Donnees de demonstration :</strong> jeux de donnees fictifs ou reels utilises lors des presentations ;</li>
+        <li><strong>Documents de presentation :</strong> supports visuels, documents techniques, rapports et tout materiel fourni dans le cadre de la presentation.</li>
+    </ul>
+
+    <!-- ARTICLE 3 -->
+    <h2><span class="article-num">Article 3</span> &mdash; Obligations de la Partie Receptrice</h2>
+    <p>BGFI s'engage a :</p>
+    <ol>
+        <li><strong>Maintenir la confidentialite stricte</strong> de toutes les Informations Confidentielles recues et a ne pas les divulguer a des tiers sans l'accord ecrit prealable de STUDIA ;</li>
+        <li><strong>Limiter l'acces</strong> aux Informations Confidentielles aux seuls collaborateurs et dirigeants ayant un besoin legitime d'en connaitre dans le cadre de l'evaluation de la Solution ;</li>
+        <li><strong>Ne pas reproduire, copier, dupliquer</strong> ou utiliser les Informations Confidentielles a d'autres fins que l'evaluation de la Solution presentee ;</li>
+        <li><strong>Ne pas proceder a toute ingenierie inverse</strong> (reverse engineering), decompilation ou tentative de reconstitution de la Solution ou de ses composants ;</li>
+        <li><strong>Ne pas developper ou faire developper</strong> une solution similaire ou concurrente basee directement ou indirectement sur les Informations Confidentielles de STUDIA ;</li>
+        <li><strong>Informer immediatement</strong> STUDIA de toute utilisation non autorisee ou divulgation accidentelle dont elle aurait connaissance.</li>
+    </ol>
+
+    <!-- ARTICLE 4 -->
+    <h2><span class="article-num">Article 4</span> &mdash; Exclusions</h2>
+    <p>Les obligations de confidentialite ne s'appliquent pas aux informations qui :</p>
+    <ul>
+        <li>Etaient deja connues de la Partie Receptrice avant leur divulgation, sous reserve de preuve ecrite ;</li>
+        <li>Sont ou deviennent publiquement accessibles sans faute de la Partie Receptrice ;</li>
+        <li>Sont obtenues legalement d'un tiers non soumis a une obligation de confidentialite ;</li>
+        <li>Doivent etre divulguees en vertu d'une obligation legale ou d'une decision de justice, sous reserve d'en informer prealablement STUDIA.</li>
+    </ul>
+
+    <!-- ARTICLE 5 -->
+    <h2><span class="article-num">Article 5</span> &mdash; Propriete Intellectuelle</h2>
+    <p>
+        Le present accord ne confere a BGFI aucun droit de propriete intellectuelle sur la Solution, son code source, ses composants, ses interfaces ou toute autre creation de STUDIA.
+    </p>
+    <p>
+        La presentation de la Solution ne constitue en aucun cas une cession, une licence ou une autorisation d'exploitation de quelque nature que ce soit, sauf accord ulterieur specifique conclu entre les Parties.
+    </p>
+    <p>
+        Tout element cree, developpe ou adapte par STUDIA dans le cadre de cette presentation reste la propriete exclusive et entiere de STUDIA.
+    </p>
+
+    <!-- ARTICLE 6 -->
+    <h2><span class="article-num">Article 6</span> &mdash; Non-Sollicitation</h2>
+    <p>
+        Pendant la duree du present accord et pendant une periode de douze (12) mois apres son expiration, BGFI s'engage a ne pas solliciter, directement ou indirectement, recruter ou tenter de recruter les collaborateurs, consultants ou sous-traitants de STUDIA ayant participe a la presentation ou au developpement de la Solution.
+    </p>
+
+    <!-- ARTICLE 7 -->
+    <h2><span class="article-num">Article 7</span> &mdash; Duree</h2>
+    <p>
+        Le present accord entre en vigueur a la date de sa signature et reste en vigueur pour une duree de <strong>trois (3) ans</strong> a compter de cette date.
+    </p>
+    <p>
+        Les obligations de confidentialite survivent a l'expiration ou a la resiliation du present accord pour une duree supplementaire de <strong>deux (2) ans</strong>.
+    </p>
+
+    <!-- ARTICLE 8 -->
+    <h2><span class="article-num">Article 8</span> &mdash; Restitution des Documents</h2>
+    <p>
+        A l'issue de la presentation, ou a la premiere demande de STUDIA, BGFI s'engage a restituer ou detruire l'ensemble des documents, supports et copies contenant des Informations Confidentielles, et a confirmer par ecrit la destruction effective de ces elements.
+    </p>
+
+    <!-- ARTICLE 9 -->
+    <h2><span class="article-num">Article 9</span> &mdash; Responsabilite et Penalites</h2>
+    <p>
+        Toute violation du present accord par la Partie Receptrice engage sa responsabilite civile et pourra donner lieu a des dommages et interets au profit de STUDIA, sans prejudice de toute autre action legale.
+    </p>
+    <p>
+        En cas de violation averee, BGFI s'engage a verser a STUDIA une indemnite forfaitaire minimale de <strong>cent millions (100 000 000) de francs CFA</strong>, sans prejudice du droit de STUDIA de demander reparation du prejudice effectivement subi.
+    </p>
+
+    <!-- ARTICLE 10 -->
+    <h2><span class="article-num">Article 10</span> &mdash; Droit Applicable et Juridiction</h2>
+    <p>
+        Le present accord est regi par le droit gabonais et les dispositions de l'Acte Uniforme OHADA relatif au droit commercial general.
+    </p>
+    <p>
+        En cas de litige, les Parties s'efforceront de trouver une solution amiable dans un delai de trente (30) jours. A defaut, le litige sera soumis a la competence exclusive du Tribunal de Commerce de Libreville.
+    </p>
+
+    <!-- ARTICLE 11 -->
+    <h2><span class="article-num">Article 11</span> &mdash; Dispositions Generales</h2>
+    <ul>
+        <li>Le present accord constitue l'integralite de l'entente entre les Parties sur son objet et annule tout accord anterieur y relatif ;</li>
+        <li>Toute modification devra faire l'objet d'un avenant ecrit signe par les deux Parties ;</li>
+        <li>La nullite eventuelle d'une clause n'affecte pas la validite des autres dispositions ;</li>
+        <li>Le present accord est etabli en deux (2) exemplaires originaux, un pour chaque Partie.</li>
+    </ul>
+
+    <!-- SIGNATURES -->
+    <p style="text-align:center; margin-top:40px; font-style:italic; color:#666; font-size:10pt;">
+        Fait a Libreville, en deux exemplaires originaux.
+    </p>
+
+    <div class="signatures">
+        <div class="sig-block">
+            <div class="sig-title">La Partie Divulgatrice</div>
+            <div class="sig-company">STUDIA ACADEMY</div>
+            <div class="sig-name">Le Directeur General</div>
+            <div class="sig-space"></div>
+            <div style="font-size:9pt; color:#666;">Signature et cachet</div>
+            <div class="sig-date">Date : <span>&nbsp;</span></div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-title">La Partie Receptrice</div>
+            <div class="sig-company">BGFI BANK S.A.</div>
+            <div class="sig-name">Le Directeur General</div>
+            <div class="sig-role">ou son representant dument habilite</div>
+            <div class="sig-space"></div>
+            <div style="font-size:9pt; color:#666;">Signature et cachet</div>
+            <div class="sig-date">Date : <span>&nbsp;</span></div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="doc-footer">
+        NDA-STUDIA-BGFI-2026-001 &bull; Document confidentiel &bull; 2 exemplaires originaux &bull; Page 1/1
+    </div>
+
+</div>
+
+</body>
+</html>
