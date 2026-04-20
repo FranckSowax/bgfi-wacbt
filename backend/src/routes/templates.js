@@ -299,8 +299,16 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
       }
     }
 
+    // Filter out incomplete buttons (no text or no URL/phone)
+    const cleanButtons = (buttons || []).filter(btn => {
+      if (!btn.text || !btn.text.trim()) return false;
+      if (btn.type === 'URL' && (!btn.url || !btn.url.trim())) return false;
+      if (btn.type === 'PHONE_NUMBER' && (!btn.phone || !btn.phone.trim())) return false;
+      return true;
+    });
+
     // Auto-tracking: convertir les boutons URL en liens de tracking
-    const trackedButtons = applyTrackingToButtons(buttons);
+    const trackedButtons = applyTrackingToButtons(cleanButtons.length > 0 ? cleanButtons : null);
 
     // Créer le template dans la base de données
     const template = await prisma.template.create({
@@ -338,6 +346,13 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
         where: { id: template.id },
         data: { metaId: metaResult.templateId }
       });
+    } else {
+      // Meta rejected — delete the local template and return error
+      await prisma.template.delete({ where: { id: template.id } });
+      return res.status(422).json({
+        error: 'Meta a rejeté le template: ' + (metaResult.error || 'Erreur inconnue'),
+        metaError: metaResult.error
+      });
     }
 
     // Métriques
@@ -352,8 +367,7 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
 
     res.status(201).json({
       ...template,
-      message: 'Template créé et soumis pour approbation Meta. Délai: 24-48h.',
-      metaStatus: metaResult.success ? 'submitted' : metaResult.error
+      message: 'Template créé et soumis pour approbation Meta. Délai: 24-48h.'
     });
   } catch (error) {
     logger.error('Error creating template', { error: error.message });

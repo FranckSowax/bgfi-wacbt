@@ -212,25 +212,33 @@ class WhatsAppCloudService {
         components.push({ type: 'FOOTER', text: data.footer });
       }
 
-      // BUTTONS component
+      // BUTTONS component — filter out incomplete buttons
       if (data.buttons && data.buttons.length > 0) {
-        components.push({
-          type: 'BUTTONS',
-          buttons: data.buttons.map(btn => {
-            if (btn.type === 'URL') {
-              const buttonDef = { type: 'URL', text: btn.text, url: btn.url };
-              // Dynamic URL suffix
-              if (btn.url.includes('{{1}}')) {
-                buttonDef.example = [btn.url.replace('{{1}}', 'example')];
-              }
-              return buttonDef;
-            }
-            if (btn.type === 'PHONE_NUMBER') {
-              return { type: 'PHONE_NUMBER', text: btn.text, phone_number: btn.phone };
-            }
-            return { type: 'QUICK_REPLY', text: btn.text };
-          })
+        const validButtons = data.buttons.filter(btn => {
+          if (!btn.text || !btn.text.trim()) return false;
+          if (btn.type === 'URL' && (!btn.url || !btn.url.trim())) return false;
+          if (btn.type === 'PHONE_NUMBER' && (!btn.phone || !btn.phone.trim())) return false;
+          return true;
         });
+        if (validButtons.length > 0) {
+          components.push({
+            type: 'BUTTONS',
+            buttons: validButtons.map(btn => {
+              if (btn.type === 'URL') {
+                const buttonDef = { type: 'URL', text: btn.text, url: btn.url };
+                // Dynamic URL suffix
+                if (btn.url.includes('{{1}}')) {
+                  buttonDef.example = [btn.url.replace('{{1}}', 'example')];
+                }
+                return buttonDef;
+              }
+              if (btn.type === 'PHONE_NUMBER') {
+                return { type: 'PHONE_NUMBER', text: btn.text, phone_number: btn.phone };
+              }
+              return { type: 'QUICK_REPLY', text: btn.text };
+            })
+          });
+        }
       }
 
       const payload = {
