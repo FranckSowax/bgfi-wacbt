@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 const csv = require('csv-parse/sync');
 const multer = require('multer');
 
@@ -8,8 +8,6 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { uploadLimiter } = require('../middleware/rateLimit');
 const logger = require('../utils/logger');
 const { contactsTotal } = require('../utils/metrics');
-
-const prisma = new PrismaClient();
 
 // Configuration de multer (memoire pour serverless - pas d'acces disque)
 const upload = multer({

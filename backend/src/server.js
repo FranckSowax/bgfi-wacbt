@@ -7,7 +7,8 @@ const path = require('path');
 require('dotenv').config();
 
 const logger = require('./utils/logger');
-const { apiLimiter } = require('./middleware/rateLimit');
+const prisma = require('./lib/prisma');
+const { apiLimiter, trackingLimiter } = require('./middleware/rateLimit');
 const { errorHandler } = require('./middleware/errorHandler');
 
 // Routes
@@ -32,8 +33,30 @@ app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
+// CORS: whitelist explicite. CLIENT_URL peut contenir plusieurs origines separees par virgule.
+// Defaut: meme origine (Railway) + dev local. Ne tombe JAMAIS sur '*'.
+const defaultOrigins = [
+  'https://bgfi-wacbt-production.up.railway.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8080'
+];
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map(s => s.trim()).filter(Boolean)
+  : defaultOrigins;
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
+  origin: (origin, callback) => {
+    // Same-origin (curl, server-to-server, mobile webview): pas de header Origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    // Rejet propre: pas de headers CORS emis -> le navigateur bloquera.
+    // Ne pas throw sinon express renvoie 500 sur les preflights OPTIONS.
+    logger.warn('CORS blocked origin', { origin });
+    return callback(null, false);
+  },
   credentials: true
 }));
 app.use(compression());
@@ -72,11 +95,8 @@ app.get('/api/health', (req, res) => {
 app.get('/api/health/deep', async (req, res) => {
   let dbStatus = 'unknown';
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
     await prisma.$queryRaw`SELECT 1`;
     dbStatus = 'connected';
-    await prisma.$disconnect();
   } catch (e) {
     dbStatus = 'error: ' + e.message;
   }
@@ -99,11 +119,9 @@ app.use('/api/webhooks', webhookRoutes);
 // Enregistre le clic sur un bouton puis redirige vers l'URL cible
 // Supporte multi-boutons (0, 1, 2)
 // ============================================
-app.get('/t/:trackingId/:buttonIndex?', async (req, res) => {
+app.get('/t/:trackingId/:buttonIndex?', trackingLimiter, async (req, res) => {
   const fallback = process.env.TRACKING_FALLBACK_URL || 'https://bgfixstudia.com/';
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
     const { trackingId } = req.params;
     const buttonIndex = parseInt(req.params.buttonIndex) || 0;
 
@@ -115,7 +133,6 @@ app.get('/t/:trackingId/:buttonIndex?', async (req, res) => {
     });
 
     if (!message) {
-      await prisma.$disconnect();
       return res.redirect(fallback);
     }
 
@@ -162,7 +179,6 @@ app.get('/t/:trackingId/:buttonIndex?', async (req, res) => {
       }
     }
 
-    await prisma.$disconnect();
     res.redirect(targetUrl);
   } catch (err) {
     logger.error('Tracking redirect error', { error: err.message, trackingId: req.params.trackingId });
@@ -184,8 +200,6 @@ app.use((req, res) => {
 // Auto-migration: appliquer les colonnes manquantes au demarrage
 async function runAutoMigrations() {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
     const migrations = [
       'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "clickedAt" TIMESTAMP(3)',
       'ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "trackingId" TEXT',
@@ -197,7 +211,6 @@ async function runAutoMigrations() {
       await prisma.$executeRawUnsafe(sql);
     }
     logger.info('Auto-migrations applied successfully');
-    await prisma.$disconnect();
   } catch (err) {
     logger.warn('Auto-migration error (may be already applied)', { error: err.message });
   }

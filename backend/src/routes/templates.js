@@ -2,15 +2,13 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const multer = require('multer');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 
 const { authenticate, authorize } = require('../middleware/auth');
 const whatsappService = require('../services/whatsapp');
 const supabase = require('../lib/supabase');
 const logger = require('../utils/logger');
 const { templatesTotal } = require('../utils/metrics');
-
-const prisma = new PrismaClient();
 
 // Multer: stockage en memoire (max 50 MB)
 const upload = multer({

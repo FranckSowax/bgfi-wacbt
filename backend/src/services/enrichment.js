@@ -4,13 +4,11 @@
 // pour extraire des indicateurs bancaires
 // ============================================
 
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 const fetch = require('node-fetch');
 const logger = require('../utils/logger');
 const ragService = require('./rag');
 const { logTokenUsage } = ragService;
-
-const prisma = new PrismaClient();
 
 // Valeurs valides pour validation
 const VALID_INTENTS = ['ACCOUNT_INQUIRY', 'LOAN_REQUEST', 'CARD_ISSUE', 'TRANSFER_HELP', 'COMPLAINT', 'PRODUCT_INFO', 'ACCOUNT_OPENING', 'FEES_CHARGES', 'MOBILE_BANKING', 'GENERAL'];

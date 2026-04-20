@@ -1,8 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 const fetch = require('node-fetch');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // Service RAG interne (pgvector + OpenAI Embeddings)

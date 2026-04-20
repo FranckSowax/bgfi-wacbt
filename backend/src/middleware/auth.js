@@ -1,7 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 /**
  * Middleware d'authentification JWT
@@ -67,10 +65,10 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    console.error('Auth error:', error);
-    return res.status(500).json({ 
+    console.error('Auth error:', error.message);
+    return res.status(500).json({
       error: 'Erreur d\'authentification',
-      message: error.message
+      message: 'Une erreur interne est survenue'
     });
   }
 };

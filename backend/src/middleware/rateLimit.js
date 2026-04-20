@@ -113,11 +113,26 @@ const uploadLimiter = rateLimit({
   }
 });
 
+// ============================================
+// Rate limiter pour le tracking de clics (/t/:trackingId)
+// Anti-DoS: un clic est ponctuel, pas besoin de centaines/min par IP
+// ============================================
+const trackingLimiter = rateLimit({
+  ...storeConfig,
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Pas de message JSON: la route fait un redirect, on laisse passer un 429 simple
+  message: 'Too many requests'
+});
+
 module.exports = {
   apiLimiter,
   campaignLimiter,
   authLimiter,
   chatbotLimiter,
   uploadLimiter,
+  trackingLimiter,
   redisClient
 };

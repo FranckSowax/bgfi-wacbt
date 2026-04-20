@@ -1,11 +1,9 @@
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 const { randomUUID } = require('crypto');
 const whatsappService = require('./whatsapp');
 const { evaluateContacts } = require('./segmentEvaluator');
 const logger = require('../utils/logger');
 const { campaignMessagesSent, campaignDuration, activeCampaigns } = require('../utils/metrics');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // Queue configuration (optionnelle)

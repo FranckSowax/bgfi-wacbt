@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 
 const { authenticate, authorize } = require('../middleware/auth');
 const { evaluateCount, evaluateContacts, buildWhereClause, ALLOWED_FIELDS } = require('../services/segmentEvaluator');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // GET /api/segments - Lister les segments

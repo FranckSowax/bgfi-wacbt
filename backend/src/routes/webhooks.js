@@ -1,13 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 
 const whatsappService = require('../services/whatsapp');
 const ragService = require('../services/rag');
 const enrichmentService = require('../services/enrichment');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // GET /webhooks/whatsapp - Vérification webhook Meta

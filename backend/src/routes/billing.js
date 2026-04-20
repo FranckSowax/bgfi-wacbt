@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // Tarification WhatsApp - Region "Rest of Africa" (Gabon)

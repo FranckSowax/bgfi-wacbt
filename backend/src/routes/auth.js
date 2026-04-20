@@ -2,27 +2,19 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 
 const { authLimiter } = require('../middleware/rateLimit');
+const { authenticate, requireRole } = require('../middleware/auth');
+const { validate, schemas } = require('../middleware/validate');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // ============================================
 // POST /api/auth/login - Connexion
 // ============================================
-router.post('/login', authLimiter, async (req, res) => {
+router.post('/login', authLimiter, validate({ body: schemas.auth.login }), async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({
-        error: 'Données manquantes',
-        message: 'Email et mot de passe requis'
-      });
-    }
 
     // Rechercher l'utilisateur
     const user = await prisma.user.findUnique({
@@ -94,17 +86,9 @@ router.post('/login', authLimiter, async (req, res) => {
 // ============================================
 // POST /api/auth/register - Inscription (admin uniquement)
 // ============================================
-router.post('/register', async (req, res) => {
+router.post('/register', authenticate, requireRole('ADMIN'), validate({ body: schemas.auth.register }), async (req, res) => {
   try {
-    const { email, password, name, role = 'OPERATOR' } = req.body;
-
-    // Validation
-    if (!email || !password || !name) {
-      return res.status(400).json({
-        error: 'Données manquantes',
-        message: 'Email, mot de passe et nom requis'
-      });
-    }
+    const { email, password, name, role } = req.body;
 
     // Vérifier si l'email existe déjà
     const existingUser = await prisma.user.findUnique({
@@ -154,16 +138,9 @@ router.post('/register', async (req, res) => {
 // ============================================
 // POST /api/auth/refresh - Rafraîchir le token
 // ============================================
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', validate({ body: schemas.auth.refresh }), async (req, res) => {
   try {
     const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({
-        error: 'Token manquant',
-        message: 'Le token à rafraîchir est requis'
-      });
-    }
 
     // Vérifier le token
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
@@ -213,26 +190,10 @@ router.post('/logout', async (req, res) => {
 // ============================================
 // POST /api/auth/change-password - Changer le mot de passe
 // ============================================
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', authenticate, validate({ body: schemas.auth.changePassword }), async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        error: 'Données manquantes',
-        message: 'Mot de passe actuel et nouveau mot de passe requis'
-      });
-    }
-
-    // Récupérer l'utilisateur depuis le token (middleware auth requis)
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({
-        error: 'Non authentifié',
-        message: 'Vous devez être connecté pour changer votre mot de passe'
-      });
-    }
+    const userId = req.user.id;
 
     const user = await prisma.user.findUnique({
       where: { id: userId }
