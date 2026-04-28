@@ -239,7 +239,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // ============================================
 router.post('/', authenticate, authorize(['template:create']), async (req, res) => {
   try {
-    const { name, displayName, category, content, language = 'fr', headerType, headerContent, buttons, footer, variables: variableMapping } = req.body;
+    const { name, displayName, category, content, language = 'fr', headerType, headerContent, buttons, footer, variables: variableMapping, interactiveMenu } = req.body;
 
     // Validation
     if (!name || !displayName || !category || !content) {
@@ -324,6 +324,7 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
         headerContent: headerContent || null,
         buttons: trackedButtons || null,
         footer: footer || null,
+        interactiveMenu: interactiveMenu && typeof interactiveMenu === 'object' ? interactiveMenu : undefined,
         status: 'PENDING'
       }
     });
@@ -381,7 +382,7 @@ router.post('/', authenticate, authorize(['template:create']), async (req, res) 
 router.put('/:id', authenticate, authorize(['template:update']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { displayName, content, language } = req.body;
+    const { displayName, content, language, interactiveMenu } = req.body;
 
     // Récupérer le template existant
     const existingTemplate = await prisma.template.findUnique({
@@ -392,11 +393,15 @@ router.put('/:id', authenticate, authorize(['template:update']), async (req, res
       return res.status(404).json({ error: 'Template non trouvé' });
     }
 
-    // Si le template est déjà approuvé, on ne peut pas le modifier
-    if (existingTemplate.status === 'APPROVED') {
+    // interactiveMenu est un parametre runtime (non transmis a Meta) -> autorise meme si APPROVED
+    const isOnlyMenuUpdate = interactiveMenu !== undefined &&
+      displayName === undefined && content === undefined && language === undefined;
+
+    // Si le template est approuve et qu'on tente de modifier autre chose que le menu -> refus
+    if (existingTemplate.status === 'APPROVED' && !isOnlyMenuUpdate) {
       return res.status(400).json({
         error: 'Template approuvé',
-        message: 'Les templates approuvés ne peuvent pas être modifiés. Créez un nouveau template.'
+        message: 'Les templates approuvés ne peuvent pas être modifiés (sauf le menu interactif). Créez un nouveau template.'
       });
     }
 
@@ -407,14 +412,17 @@ router.put('/:id', authenticate, authorize(['template:update']), async (req, res
       variables = variableMatches.map((_, index) => `var${index + 1}`);
     }
 
+    const updateData = {};
+    if (displayName !== undefined) updateData.displayName = displayName;
+    if (content !== undefined) { updateData.content = content; updateData.variables = variables; }
+    if (language !== undefined) updateData.language = language;
+    if (interactiveMenu !== undefined) {
+      updateData.interactiveMenu = interactiveMenu === null ? null : (typeof interactiveMenu === 'object' ? interactiveMenu : undefined);
+    }
+
     const template = await prisma.template.update({
       where: { id },
-      data: {
-        displayName,
-        content,
-        language,
-        variables
-      }
+      data: updateData
     });
 
     logger.info('Template updated', { templateId: id, userId: req.user.id });

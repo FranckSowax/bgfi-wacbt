@@ -105,6 +105,10 @@ model Template {
   buttons       Json?            // [{type:"URL",text:"...",url:"..."}, {type:"QUICK_REPLY",text:"..."}]
   footer        String?
 
+  // Interactive menu (deroulant): declenche apres clic sur un quick_reply du template
+  // Structure: { enabled, triggerButtonText?, header, body, footer?, buttonText, sections:[{title, rows:[{id,title,description?,response?}]}] }
+  interactiveMenu Json?
+
   // Meta approval status
   status      TemplateStatus   @default(PENDING)
   metaId      String?          // WhatsApp template ID from Meta

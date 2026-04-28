@@ -132,6 +132,24 @@ async function handleIncomingMessage(message, contacts) {
     // Note: Le tracking des clics est géré par le redirect /t/:trackingId (server.js)
     // Les clics sur les boutons URL des templates passent par notre serveur de redirection
 
+    // === Clic sur QUICK_REPLY d'un template -> declenche le menu interactif si configure ===
+    if (message.type === 'button' && message.button) {
+      const handled = await handleQuickReplyClick(message, dbContact, phone);
+      if (handled) return; // menu envoye, on s'arrete la
+    }
+
+    // === Choix dans un INTERACTIVE LIST -> envoyer la reponse configuree ===
+    if (message.type === 'interactive' && message.interactive?.type === 'list_reply') {
+      const handled = await handleListReply(message.interactive.list_reply, dbContact, phone);
+      if (handled) return;
+    }
+
+    // === Clic sur INTERACTIVE BUTTON REPLY (3 boutons reply) ===
+    if (message.type === 'interactive' && message.interactive?.type === 'button_reply') {
+      const handled = await handleListReply(message.interactive.button_reply, dbContact, phone);
+      if (handled) return;
+    }
+
     // Chatbot automatique : repond a tous les messages texte entrants via RAG
     if (message.type === 'text' && message.text?.body) {
       const text = message.text.body;
@@ -185,6 +203,140 @@ async function handleIncomingMessage(message, contacts) {
     }
   } catch (error) {
     logger.error('Error handling incoming message', { error: error.message });
+  }
+}
+
+// ============================================
+// Gestionnaire: Clic sur quick_reply d'un template -> envoyer le menu interactif
+// ============================================
+// Encode la cle de row pour qu'on puisse retrouver le template au list_reply
+// Format: "tpl_<8 premiers chars de templateId>__<rowId original>"
+function encodeRowId(templateId, originalId) {
+  return `tpl_${String(templateId).slice(0, 8)}__${String(originalId).slice(0, 180)}`;
+}
+function decodeRowId(encoded) {
+  if (!encoded || !encoded.startsWith('tpl_')) return null;
+  const parts = encoded.slice(4).split('__');
+  if (parts.length < 2) return null;
+  return { templatePrefix: parts[0], originalId: parts.slice(1).join('__') };
+}
+
+async function handleQuickReplyClick(message, dbContact, phone) {
+  try {
+    const buttonText = message.button.text || message.button.payload;
+    const originalMsgId = message.context?.id; // wamid du template envoye
+
+    // Retrouver le template via le message original
+    let template = null;
+    if (originalMsgId) {
+      const dbMsg = await prisma.message.findFirst({
+        where: { externalId: originalMsgId },
+        include: { campaign: { include: { template: true } } }
+      });
+      template = dbMsg?.campaign?.template || null;
+    }
+
+    // Fallback: chercher la campagne la plus recente avec template ayant un menu et matchant le bouton
+    if (!template) {
+      const recentMsg = await prisma.message.findFirst({
+        where: { contactId: dbContact.id, status: { in: ['SENT', 'DELIVERED', 'READ'] } },
+        orderBy: { sentAt: 'desc' },
+        include: { campaign: { include: { template: true } } }
+      });
+      template = recentMsg?.campaign?.template || null;
+    }
+
+    if (!template?.interactiveMenu) return false;
+    const menu = template.interactiveMenu;
+    if (!menu.enabled) return false;
+
+    // Si triggerButtonText configure, ne se declenche que pour ce texte
+    if (menu.triggerButtonText && menu.triggerButtonText.trim() && menu.triggerButtonText.trim().toLowerCase() !== String(buttonText || '').trim().toLowerCase()) {
+      return false;
+    }
+
+    // Encoder les ids des rows pour pouvoir retrouver le template au list_reply
+    const sectionsEncoded = (menu.sections || []).map(sec => ({
+      title: sec.title,
+      rows: (sec.rows || []).map(r => ({
+        id: encodeRowId(template.id, r.id || r.title),
+        title: r.title,
+        description: r.description
+      }))
+    }));
+
+    const result = await whatsappService.sendInteractiveList(phone, {
+      header: menu.header,
+      body: menu.body,
+      footer: menu.footer,
+      buttonText: menu.buttonText,
+      sections: sectionsEncoded
+    });
+
+    logger.info('Interactive menu sent after quick_reply', {
+      contactId: dbContact.id,
+      templateId: template.id,
+      buttonText,
+      success: result.success
+    });
+    return result.success;
+  } catch (error) {
+    logger.error('Error handling quick_reply click', { error: error.message });
+    return false;
+  }
+}
+
+// ============================================
+// Gestionnaire: Choix d'une row de list / button_reply -> envoyer la reponse
+// ============================================
+async function handleListReply(reply, dbContact, phone) {
+  try {
+    const decoded = decodeRowId(reply.id);
+    if (!decoded) return false;
+
+    // Retrouver le template par prefix d'id (8 premiers chars)
+    const templates = await prisma.template.findMany({
+      where: { interactiveMenu: { not: null } }
+    });
+    const template = templates.find(t => t.id.startsWith(decoded.templatePrefix));
+    if (!template?.interactiveMenu) return false;
+
+    // Trouver la row correspondante par originalId
+    const menu = template.interactiveMenu;
+    let matchedRow = null;
+    for (const sec of (menu.sections || [])) {
+      for (const row of (sec.rows || [])) {
+        if (String(row.id || row.title) === decoded.originalId) {
+          matchedRow = row;
+          break;
+        }
+      }
+      if (matchedRow) break;
+    }
+
+    if (!matchedRow) return false;
+
+    // Reponse statique configuree, ou fallback sur le RAG avec le titre comme query
+    if (matchedRow.response && matchedRow.response.trim()) {
+      await whatsappService.sendMessage(phone, matchedRow.response);
+      logger.info('Static response sent for list_reply', { contactId: dbContact.id, templateId: template.id, rowTitle: matchedRow.title });
+    } else {
+      // Fallback RAG
+      try {
+        const result = await ragService.chat(matchedRow.title || reply.title, dbContact.id);
+        if (result.response) {
+          await whatsappService.sendMessage(phone, result.response);
+          logger.info('RAG response sent for list_reply', { contactId: dbContact.id, rowTitle: matchedRow.title });
+        }
+      } catch (e) {
+        logger.warn('RAG fallback failed for list_reply', { error: e.message });
+        await whatsappService.sendMessage(phone, 'Merci pour votre choix. Un conseiller BGFI Bank vous repondra dans les plus brefs delais.').catch(() => {});
+      }
+    }
+    return true;
+  } catch (error) {
+    logger.error('Error handling list_reply', { error: error.message });
+    return false;
   }
 }
 

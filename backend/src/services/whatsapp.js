@@ -84,6 +84,110 @@ class WhatsAppCloudService {
   }
 
   /**
+   * Envoyer un INTERACTIVE LIST MESSAGE (menu deroulant)
+   * Doit etre envoye dans la fenetre 24h apres un message du client
+   * @param {string} phone - Numero destinataire
+   * @param {Object} menu - { header, body, footer?, buttonText, sections: [{title, rows: [{id, title, description?}]}] }
+   */
+  async sendInteractiveList(phone, menu) {
+    try {
+      const to = phone.replace(/[^0-9]/g, '');
+
+      // Sanitize sections (Meta limits: max 10 sections, max 10 rows per section, total <= 100 rows)
+      const sections = (menu.sections || [])
+        .slice(0, 10)
+        .map(sec => ({
+          title: (sec.title || '').slice(0, 24),
+          rows: (sec.rows || []).slice(0, 10).map(r => {
+            const row = {
+              id: String(r.id).slice(0, 200),
+              title: String(r.title || '').slice(0, 24)
+            };
+            if (r.description) row.description = String(r.description).slice(0, 72);
+            return row;
+          }).filter(r => r.id && r.title)
+        }))
+        .filter(s => s.rows.length > 0);
+
+      if (sections.length === 0) {
+        return { success: false, error: 'Aucune section/row valide pour le menu interactif' };
+      }
+
+      const interactive = {
+        type: 'list',
+        body: { text: String(menu.body || '').slice(0, 1024) || ' ' },
+        action: {
+          button: String(menu.buttonText || 'Voir').slice(0, 20),
+          sections
+        }
+      };
+      if (menu.header) interactive.header = { type: 'text', text: String(menu.header).slice(0, 60) };
+      if (menu.footer) interactive.footer = { text: String(menu.footer).slice(0, 60) };
+
+      const response = await this.client.post(`/${this.phoneNumberId}/messages`, {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive
+      });
+
+      const messageId = response.data?.messages?.[0]?.id;
+      logger.info('Interactive list sent', { to: phone.replace(/\d(?=\d{4})/g, '*'), messageId });
+      return { success: true, messageId };
+    } catch (error) {
+      const errMsg = error.response?.data?.error?.message || error.message;
+      logger.error('Erreur envoi interactive list', { error: errMsg, phone: phone.replace(/\d(?=\d{4})/g, '*') });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
+   * Envoyer un INTERACTIVE BUTTONS MESSAGE (max 3 reply buttons)
+   * Doit etre envoye dans la fenetre 24h apres un message du client
+   */
+  async sendInteractiveButtons(phone, { header, body, footer, buttons }) {
+    try {
+      const to = phone.replace(/[^0-9]/g, '');
+      const cleanButtons = (buttons || [])
+        .slice(0, 3)
+        .map(b => ({
+          type: 'reply',
+          reply: { id: String(b.id).slice(0, 256), title: String(b.title || '').slice(0, 20) }
+        }))
+        .filter(b => b.reply.id && b.reply.title);
+
+      if (cleanButtons.length === 0) {
+        return { success: false, error: 'Aucun bouton valide' };
+      }
+
+      const interactive = {
+        type: 'button',
+        body: { text: String(body || '').slice(0, 1024) || ' ' },
+        action: { buttons: cleanButtons }
+      };
+      if (header) interactive.header = { type: 'text', text: String(header).slice(0, 60) };
+      if (footer) interactive.footer = { text: String(footer).slice(0, 60) };
+
+      const response = await this.client.post(`/${this.phoneNumberId}/messages`, {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive
+      });
+
+      const messageId = response.data?.messages?.[0]?.id;
+      logger.info('Interactive buttons sent', { to: phone.replace(/\d(?=\d{4})/g, '*'), messageId });
+      return { success: true, messageId };
+    } catch (error) {
+      const errMsg = error.response?.data?.error?.message || error.message;
+      logger.error('Erreur envoi interactive buttons', { error: errMsg });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
    * Envoyer des messages en batch avec rate limiting
    */
   async sendBatch(messages, options = {}) {
