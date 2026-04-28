@@ -3123,6 +3123,24 @@
             const [creating, setCreating] = useState(false);
             const [uploading, setUploading] = useState(false);
             const [uploadProgress, setUploadProgress] = useState('');
+            const [testMenuModal, setTestMenuModal] = useState(null); // template object
+            const [testMenuPhone, setTestMenuPhone] = useState('');
+            const [testMenuSending, setTestMenuSending] = useState(false);
+
+            const handleSendTestMenu = async () => {
+                if (!testMenuModal || !testMenuPhone) return;
+                setTestMenuSending(true);
+                try {
+                    const result = await api(`/templates/${testMenuModal.id}/test-menu`, { method: 'POST', body: JSON.stringify({ phone: testMenuPhone }) });
+                    alert('Menu envoye avec succes ! ' + (result.message || ''));
+                    setTestMenuModal(null);
+                    setTestMenuPhone('');
+                } catch (err) {
+                    alert('Erreur: ' + err.message);
+                } finally {
+                    setTestMenuSending(false);
+                }
+            };
 
             const handleMediaUpload = async (file) => {
                 if (!file) return;
@@ -3405,6 +3423,9 @@
                                             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                                 <span className="text-xs text-gray-400">{template.language?.toUpperCase() || 'FR'}</span>
                                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {template.interactiveMenu?.enabled && (
+                                                        <button onClick={() => { setTestMenuModal(template); setTestMenuPhone(''); }} className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="Tester le menu interactif"><Icons.List className="w-4 h-4" /></button>
+                                                    )}
                                                     <button onClick={() => openDuplicate(template)} className="p-1.5 rounded-lg text-gray-400 hover:text-bgfi-primary hover:bg-bgfi-primary/5 transition-colors" title="Dupliquer"><Icons.Copy className="w-4 h-4" /></button>
                                                     <button onClick={() => handleDelete(template.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Supprimer"><Icons.Trash2 className="w-4 h-4" /></button>
                                                 </div>
@@ -3469,6 +3490,9 @@
                                                 <td className="px-5 py-4"><span className="text-xs text-gray-500 uppercase">{template.language || 'fr'}</span></td>
                                                 <td className="px-5 py-4 text-right">
                                                     <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {template.interactiveMenu?.enabled && (
+                                                            <button onClick={() => { setTestMenuModal(template); setTestMenuPhone(''); }} className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="Tester le menu interactif"><Icons.List className="w-4 h-4" /></button>
+                                                        )}
                                                         <button onClick={() => openDuplicate(template)} className="p-1.5 rounded-lg text-gray-400 hover:text-bgfi-primary hover:bg-bgfi-primary/5 transition-colors" title="Dupliquer"><Icons.Copy className="w-4 h-4" /></button>
                                                         <button onClick={() => handleDelete(template.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Supprimer"><Icons.Trash2 className="w-4 h-4" /></button>
                                                     </div>
@@ -3748,6 +3772,36 @@
                                 <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                                     <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Annuler</Button>
                                     <Button onClick={handleCreate} disabled={creating || !form.name || !form.content} icon={Icons.CheckCircle}>{creating ? 'Creation...' : 'Soumettre pour approbation'}</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {testMenuModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4" onClick={() => !testMenuSending && setTestMenuModal(null)}>
+                            <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center"><Icons.List className="w-4 h-4 text-purple-600" /></div>
+                                        <h2 className="text-lg font-semibold text-gray-900">Tester le menu</h2>
+                                    </div>
+                                    <button onClick={() => setTestMenuModal(null)} disabled={testMenuSending} className="text-gray-400 hover:text-gray-600 p-1 disabled:opacity-50"><Icons.X /></button>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                                        <p className="text-gray-600 text-xs mb-1">Template</p>
+                                        <p className="font-medium text-gray-900">{testMenuModal.displayName || testMenuModal.name}</p>
+                                    </div>
+                                    <Input label="Numero de test (avec indicatif)" placeholder="+33624576620" value={testMenuPhone} onChange={v => setTestMenuPhone(v)} />
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                        <p className="text-xs text-amber-800">
+                                            <strong>Important :</strong> Le destinataire doit avoir envoye un message a BGFI WhatsApp dans les 24 dernieres heures, sinon Meta bloquera la livraison.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="p-5 border-t border-gray-200 flex justify-end gap-3">
+                                    <Button variant="secondary" onClick={() => setTestMenuModal(null)} disabled={testMenuSending}>Annuler</Button>
+                                    <Button onClick={handleSendTestMenu} disabled={testMenuSending || !testMenuPhone} icon={Icons.Send}>{testMenuSending ? 'Envoi...' : 'Envoyer le menu'}</Button>
                                 </div>
                             </div>
                         </div>

@@ -5,6 +5,7 @@ const multer = require('multer');
 const prisma = require('../lib/prisma');
 
 const { authenticate, authorize } = require('../middleware/auth');
+const { validate, Joi } = require('../middleware/validate');
 const whatsappService = require('../services/whatsapp');
 const supabase = require('../lib/supabase');
 const logger = require('../utils/logger');
@@ -538,6 +539,85 @@ router.post('/:id/duplicate', authenticate, authorize(['template:create']), asyn
     res.status(500).json({ error: 'Erreur lors de la duplication du template' });
   }
 });
+
+// ============================================
+// POST /api/templates/:id/test-menu - Envoyer le menu interactif a un numero pour test
+// Body: { phone: "+33624576620" }
+// Necessite: 1) un menu interactif configure sur le template,
+//            2) le destinataire doit avoir messsage BGFI dans les 24h.
+// ============================================
+router.post('/:id/test-menu',
+  authenticate,
+  validate({
+    body: Joi.object({
+      phone: Joi.string().pattern(/^\+?[0-9 ]{8,20}$/).required()
+        .messages({ 'string.pattern.base': 'Numero invalide. Format attendu: +33624576620' })
+    })
+  }),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { phone } = req.body;
+
+      const template = await prisma.template.findUnique({ where: { id } });
+      if (!template) {
+        return res.status(404).json({ error: 'Template non trouve' });
+      }
+
+      const menu = template.interactiveMenu;
+      if (!menu || !menu.enabled) {
+        return res.status(400).json({
+          error: 'Menu interactif non configure',
+          message: 'Activez et configurez le menu interactif pour ce template avant de le tester.'
+        });
+      }
+
+      // Encode les ids des rows comme le webhook (tpl_<id>__<rowId>) pour que le list_reply soit gere
+      const sectionsEncoded = (menu.sections || []).map(sec => ({
+        title: sec.title,
+        rows: (sec.rows || []).map(r => ({
+          id: `tpl_${String(template.id).slice(0, 8)}__${String(r.id || r.title).slice(0, 180)}`,
+          title: r.title,
+          description: r.description
+        }))
+      }));
+
+      const result = await whatsappService.sendInteractiveList(phone, {
+        header: menu.header,
+        body: menu.body,
+        footer: menu.footer,
+        buttonText: menu.buttonText,
+        sections: sectionsEncoded
+      });
+
+      logger.info('Test menu sent', {
+        templateId: id,
+        phone: phone.replace(/\d(?=\d{4})/g, '*'),
+        success: result.success,
+        userId: req.user.id
+      });
+
+      if (!result.success) {
+        return res.status(502).json({
+          error: 'Echec envoi WhatsApp',
+          message: result.error,
+          hint: /re-?engagement|24|window|outside/i.test(String(result.error || ''))
+            ? 'Le destinataire doit avoir envoye un message a BGFI dans les 24h.'
+            : undefined
+        });
+      }
+
+      res.json({
+        success: true,
+        messageId: result.messageId,
+        message: 'Menu interactif envoye. Verifiez la reception sur le numero ' + phone
+      });
+    } catch (error) {
+      logger.error('Error sending test menu', { error: error.message, templateId: req.params.id });
+      res.status(500).json({ error: 'Erreur interne' });
+    }
+  }
+);
 
 // ============================================
 // DELETE /api/templates/:id - Supprimer un template
