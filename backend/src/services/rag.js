@@ -28,10 +28,20 @@ async function initialize() {
         type VARCHAR(50) DEFAULT 'text',
         metadata JSONB DEFAULT '{}',
         chunk_count INT DEFAULT 0,
+        priority FLOAT DEFAULT 1.0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+    // Auto-migration: ajout de la colonne priority pour les bases existantes
+    await prisma.$queryRawUnsafe(`ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS priority FLOAT DEFAULT 1.0`);
+
+    // Backfill: rapports quotidiens / enrichissements -> priority basse pour ne pas noyer les docs metier
+    // (run-once safe: ne touche que les docs qui ont encore la valeur par defaut 1.0)
+    await prisma.$queryRawUnsafe(
+      `UPDATE rag_documents SET priority = 0.3 WHERE type = 'report' AND priority = 1.0`
+    );
 
     await prisma.$queryRawUnsafe(`
       CREATE TABLE IF NOT EXISTS rag_chunks (
@@ -187,15 +197,20 @@ function chunkText(text, chunkSize = 1000, overlap = 100) {
 // ============================================
 // Ajouter un document a la base de connaissances
 // ============================================
-async function addDocument(title, content, type = 'text', metadata = {}) {
+async function addDocument(title, content, type = 'text', metadata = {}, priority = null) {
   await initialize();
+
+  // Default priority par type si non fournie:
+  //   'report' -> 0.3 (signal historique de masse, ne doit pas noyer le doc principal)
+  //   autres   -> 1.0 (poids normal)
+  const effectivePriority = priority != null ? priority : (type === 'report' ? 0.3 : 1.0);
 
   // Creer le document
   const docs = await prisma.$queryRawUnsafe(
-    `INSERT INTO rag_documents (title, content, type, metadata)
-     VALUES ($1, $2, $3, $4::jsonb)
-     RETURNING id, title, type, chunk_count, created_at`,
-    title, content, type, JSON.stringify(metadata)
+    `INSERT INTO rag_documents (title, content, type, metadata, priority)
+     VALUES ($1, $2, $3, $4::jsonb, $5)
+     RETURNING id, title, type, chunk_count, priority, created_at`,
+    title, content, type, JSON.stringify(metadata), effectivePriority
   );
   const doc = docs[0];
 
@@ -242,8 +257,12 @@ async function addDocument(title, content, type = 'text', metadata = {}) {
 }
 
 // ============================================
-// Recherche par similarite vectorielle
+// Recherche par similarite vectorielle (ponderee par priority + cap 1 chunk/rapport)
 // ============================================
+// Score effectif = similarity * priority. Le seuil reste applique sur la similarite brute
+// (un rapport avec une priorite faible peut donc passer SI la similarite est tres haute).
+// Cap: pour les documents de type 'report', on ne garde que le meilleur chunk par document
+// pour eviter qu'un meme rapport monopolise le contexte. Les autres types ne sont pas limites.
 async function searchSimilar(query, topK = 5, threshold = 0.7) {
   await initialize();
 
@@ -251,13 +270,32 @@ async function searchSimilar(query, topK = 5, threshold = 0.7) {
   const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
   const results = await prisma.$queryRawUnsafe(
-    `SELECT c.content, c.chunk_index, c.document_id,
-            d.title as doc_title,
-            1 - (c.embedding <=> $1::vector) as similarity
-     FROM rag_chunks c
-     JOIN rag_documents d ON d.id = c.document_id
-     WHERE 1 - (c.embedding <=> $1::vector) > $2
-     ORDER BY c.embedding <=> $1::vector
+    `WITH ranked AS (
+       SELECT c.content,
+              c.chunk_index,
+              c.document_id,
+              d.title AS doc_title,
+              d.type AS doc_type,
+              COALESCE(d.priority, 1.0) AS priority,
+              (1 - (c.embedding <=> $1::vector)) AS similarity,
+              (1 - (c.embedding <=> $1::vector)) * COALESCE(d.priority, 1.0) AS score
+       FROM rag_chunks c
+       JOIN rag_documents d ON d.id = c.document_id
+       WHERE (1 - (c.embedding <=> $1::vector)) > $2
+     ),
+     deduped AS (
+       SELECT *,
+              CASE
+                WHEN doc_type = 'report'
+                  THEN ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY score DESC)
+                ELSE 1
+              END AS rn_per_doc
+       FROM ranked
+     )
+     SELECT content, chunk_index, document_id, doc_title, doc_type, priority, similarity, score
+     FROM deduped
+     WHERE rn_per_doc = 1
+     ORDER BY score DESC
      LIMIT $3`,
     embeddingStr, threshold, topK
   );
@@ -351,12 +389,27 @@ async function listDocuments() {
   if (!ready) return [];
   try {
     return await prisma.$queryRawUnsafe(
-      `SELECT id, title, type, chunk_count, metadata, created_at, updated_at
-       FROM rag_documents ORDER BY created_at DESC`
+      `SELECT id, title, type, chunk_count, priority, metadata, created_at, updated_at
+       FROM rag_documents ORDER BY priority DESC, created_at DESC`
     );
   } catch {
     return [];
   }
+}
+
+// ============================================
+// Mettre a jour la priorite d'un document
+// 0.0 = ignore presque toujours, 1.0 = poids normal, 2.0 = priorise tres fortement
+// ============================================
+async function updateDocumentPriority(id, priority) {
+  await initialize();
+  const p = Math.max(0, Math.min(5, Number(priority)));
+  await prisma.$queryRawUnsafe(
+    `UPDATE rag_documents SET priority = $1, updated_at = NOW() WHERE id = $2::uuid`,
+    p, id
+  );
+  logger.info('RAG document priority updated', { id, priority: p });
+  return { id, priority: p };
 }
 
 // ============================================
@@ -589,6 +642,7 @@ module.exports = {
   chat,
   listDocuments,
   deleteDocument,
+  updateDocumentPriority,
   getConfig,
   updateConfig,
   getStats,

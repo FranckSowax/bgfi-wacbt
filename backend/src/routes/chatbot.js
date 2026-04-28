@@ -98,19 +98,41 @@ router.get('/knowledge', authenticate, async (req, res) => {
   try {
     const docs = await ragService.listDocuments();
 
-    // Formater pour le frontend (attend: { documents: [{ id, name, type, uploadedAt }] })
     res.json({
       documents: docs.map(d => ({
         id: d.id,
         name: d.title,
         type: d.type,
         chunkCount: d.chunk_count,
+        priority: d.priority != null ? Number(d.priority) : 1.0,
         uploadedAt: d.created_at
       }))
     });
   } catch (error) {
     logger.error('Error fetching knowledge documents', { error: error.message });
     res.status(500).json({ error: 'Erreur lors de la recuperation des documents', documents: [] });
+  }
+});
+
+// ============================================
+// PATCH /api/chatbot/knowledge/:id - Modifier la priorite d'un document
+// Body: { priority: 0.0 - 5.0 }
+// ============================================
+router.patch('/knowledge/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { priority } = req.body;
+
+    if (priority == null || isNaN(Number(priority))) {
+      return res.status(400).json({ error: 'priority numerique requis (0.0 - 5.0)' });
+    }
+    const p = Math.max(0, Math.min(5, Number(priority)));
+
+    const result = await ragService.updateDocumentPriority(id, p);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('Error updating document priority', { error: error.message, id: req.params.id });
+    res.status(500).json({ error: 'Erreur lors de la mise a jour de la priorite' });
   }
 });
 

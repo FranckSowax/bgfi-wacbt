@@ -381,10 +381,12 @@ Recommandations:
 ${report.recommendations || 'Aucune recommandation disponible'}`;
 
   const title = `Rapport conversations du ${dateStr}`;
+  // Priorite 0.3 : les rapports sont du signal historique, ils ne doivent pas
+  // noyer le document principal BGFI lors des recherches RAG.
   const doc = await ragService.addDocument(title, content, 'report', {
     type: 'daily_report',
     date: report.date.toISOString()
-  });
+  }, 0.3);
 
   logger.info('Report fed to RAG', { reportId, docId: doc.id });
   return doc;

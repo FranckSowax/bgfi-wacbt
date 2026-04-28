@@ -1232,20 +1232,55 @@
                                     </div>
                                 </div>
                             )}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                                <strong>Priorite :</strong> ajustez le poids de chaque document dans les recherches RAG. <code className="bg-blue-100 px-1 rounded">1.0</code> = poids normal, <code className="bg-blue-100 px-1 rounded">0.3</code> = signal d'appoint (rapports quotidiens), <code className="bg-blue-100 px-1 rounded">2.0</code> = priorise fortement (doc de reference). Les rapports sont en plus limites a 1 chunk max par recherche.
+                            </div>
                             <Card>
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
-                                        <thead><tr className="border-b border-gray-200"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Document</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Type</th><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Date</th><th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th></tr></thead>
+                                        <thead><tr className="border-b border-gray-200">
+                                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Document</th>
+                                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Type</th>
+                                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Priorite</th>
+                                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Date</th>
+                                            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Actions</th>
+                                        </tr></thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {uploadedFiles.length === 0 && <tr><td colSpan="4" className="py-8 text-center text-gray-500">Aucun document dans la base</td></tr>}
-                                            {uploadedFiles.map(file => (
+                                            {uploadedFiles.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-gray-500">Aucun document dans la base</td></tr>}
+                                            {uploadedFiles.map(file => {
+                                                const isReport = file.type === 'report';
+                                                const priority = file.priority != null ? Number(file.priority) : 1.0;
+                                                const priorityColor = priority >= 1.5 ? 'bg-emerald-100 text-emerald-700' : priority >= 0.8 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600';
+                                                return (
                                                 <tr key={file.id} className="hover:bg-gray-50">
-                                                    <td className="py-4 px-4"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center"><Icons.FileText /></div><span className="font-medium text-gray-900">{file.name}</span></div></td>
-                                                    <td className="py-4 px-4 text-sm text-gray-600 uppercase">{file.type || '-'}</td>
+                                                    <td className="py-4 px-4"><div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isReport ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}><Icons.FileText /></div>
+                                                        <span className="font-medium text-gray-900 truncate max-w-xs">{file.name}</span>
+                                                    </div></td>
+                                                    <td className="py-4 px-4 text-sm">
+                                                        {isReport ? (
+                                                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">Rapport</span>
+                                                        ) : (
+                                                            <span className="text-gray-600 uppercase">{file.type || 'doc'}</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-4 px-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <input type="number" min="0" max="5" step="0.1" defaultValue={priority.toFixed(1)} className={`w-16 px-2 py-1 text-sm border rounded font-mono ${priorityColor}`}
+                                                                onBlur={async (e) => {
+                                                                    const v = parseFloat(e.target.value);
+                                                                    if (isNaN(v) || v === priority) return;
+                                                                    try { await api('/chatbot/knowledge/' + file.id, { method: 'PATCH', body: JSON.stringify({ priority: v }) }); refetchKB(); }
+                                                                    catch (err) { alert('Erreur: ' + err.message); e.target.value = priority.toFixed(1); }
+                                                                }}
+                                                                onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }} />
+                                                        </div>
+                                                    </td>
                                                     <td className="py-4 px-4 text-sm text-gray-600">{file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString('fr-FR') : '-'}</td>
                                                     <td className="py-4 px-4 text-right"><Button variant="ghost" size="sm" icon={Icons.Trash2} onClick={() => handleDeleteDoc(file.id)} /></td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
