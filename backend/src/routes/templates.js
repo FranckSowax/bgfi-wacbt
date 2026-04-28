@@ -715,6 +715,47 @@ router.post('/:id/sync', authenticate, authorize(['template:sync']), async (req,
   }
 });
 
+// Helper: download a Meta CDN url and re-upload to Supabase Storage to get a stable public URL
+async function rehostMetaMediaToSupabase(metaUrl) {
+  if (!supabase) return null;
+  if (!metaUrl || typeof metaUrl !== 'string') return null;
+  // Only rehost Meta CDN URLs; pass-through for already stable URLs
+  if (!/scontent[.-]|whatsapp\.net|fbcdn\.net|lookaside\.fb/i.test(metaUrl)) return null;
+
+  try {
+    const axios = require('axios');
+    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const resp = await axios.get(metaUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: { 'Authorization': `OAuth ${token}`, 'User-Agent': 'WhatsApp/2.0' }
+    });
+    const buffer = Buffer.from(resp.data);
+    let mime = resp.headers['content-type'] || 'image/jpeg';
+    if (mime === 'application/octet-stream' || mime === 'binary/octet-stream') {
+      if (/\.mp4/i.test(metaUrl)) mime = 'video/mp4';
+      else if (/\.png/i.test(metaUrl)) mime = 'image/png';
+      else mime = 'image/jpeg';
+    }
+    const ext = mime.startsWith('video/') ? 'mp4' : (mime === 'image/png' ? 'png' : 'jpg');
+    const path = `meta_synced_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from('templates-media')
+      .upload(path, buffer, { contentType: mime, upsert: false });
+    if (upErr) {
+      logger.warn('Failed to rehost Meta media to Supabase', { error: upErr.message });
+      return null;
+    }
+    const { data: urlData } = supabase.storage.from('templates-media').getPublicUrl(path);
+    logger.info('Meta media rehosted to Supabase', { path, mime, size: buffer.length });
+    return urlData?.publicUrl || null;
+  } catch (e) {
+    logger.warn('Error rehosting Meta media', { error: e.message });
+    return null;
+  }
+}
+
 // ============================================
 // POST /api/templates/sync-all - Synchroniser tous les templates avec Meta
 // ============================================
@@ -728,6 +769,7 @@ router.post('/sync-all', authenticate, async (req, res) => {
     const metaTemplates = templatesResult.templates;
     let synced = 0;
     let created = 0;
+    let rehosted = 0;
 
     for (const mt of metaTemplates) {
       // Extract component info
@@ -738,7 +780,15 @@ router.post('/sync-all', authenticate, async (req, res) => {
 
       const headerType = headerComp?.format || 'NONE';
       // Prefer header_url (actual accessible URL) over header_handle (opaque token for template creation only)
-      const headerContent = headerComp?.format === 'TEXT' ? headerComp.text : (headerComp?.example?.header_url?.[0] || headerComp?.example?.header_handle?.[0] || null);
+      let headerContent = headerComp?.format === 'TEXT' ? headerComp.text : (headerComp?.example?.header_url?.[0] || headerComp?.example?.header_handle?.[0] || null);
+
+      // If headerContent is a Meta CDN URL (signed, expires, browser-403), rehost to Supabase for stable display.
+      // Skip if we already have a Supabase URL on the existing record (handled below).
+      if (headerType !== 'TEXT' && headerType !== 'NONE' && headerContent) {
+        const stable = await rehostMetaMediaToSupabase(headerContent);
+        if (stable) { headerContent = stable; rehosted++; }
+      }
+
       const footer = footerComp?.text || null;
       const buttons = buttonsComp?.buttons?.map(b => ({
         type: b.type, text: b.text,
@@ -797,7 +847,7 @@ router.post('/sync-all', authenticate, async (req, res) => {
       }
     }
 
-    res.json({ success: true, synced, created, total: metaTemplates.length });
+    res.json({ success: true, synced, created, rehosted, total: metaTemplates.length });
   } catch (error) {
     logger.error('Error syncing all templates', { error: error.message });
     res.status(500).json({ error: 'Erreur lors de la synchronisation' });

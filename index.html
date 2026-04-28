@@ -83,6 +83,13 @@
             clear: () => { localStorage.removeItem('bgfi_token'); localStorage.removeItem('bgfi_user'); },
         };
 
+        // Detecte les URLs Meta CDN (signees + expiration) qui retournent 403 dans un navigateur.
+        // Pour ces URLs, on n'essaie pas de les charger -> evite le bruit console + spinners casses.
+        const isMetaCdnUrl = (url) => {
+            if (!url || typeof url !== 'string') return false;
+            return /scontent[.-]|whatsapp\.net|fbcdn\.net|lookaside\.fb/i.test(url);
+        };
+
         const api = async (endpoint, options = {}) => {
             const token = authStore.getToken();
             const headers = { ...options.headers };
@@ -3382,7 +3389,7 @@
                                 return (
                                     <div key={template.id} className="bg-white rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all overflow-hidden group">
                                         {/* Header image or color band */}
-                                        {template.headerType === 'IMAGE' && template.headerContent ? (
+                                        {template.headerType === 'IMAGE' && template.headerContent && !isMetaCdnUrl(template.headerContent) ? (
                                             <div className="h-36 overflow-hidden bg-gray-100">
                                                 <img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="" className="w-full h-full object-cover" onError={e => { e.target.parentElement.className = 'h-3 ' + cs.bg; e.target.style.display='none'; }} />
                                             </div>
@@ -3459,7 +3466,7 @@
                                             <tr key={template.id} className="hover:bg-gray-50 transition-colors group">
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        {template.headerType === 'IMAGE' && template.headerContent ? (
+                                                        {template.headerType === 'IMAGE' && template.headerContent && !isMetaCdnUrl(template.headerContent) ? (
                                                             <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                                                                 <img src={template.headerContent.startsWith('http') ? template.headerContent : '/' + template.headerContent} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
                                                             </div>
