@@ -14,6 +14,17 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // ============================================
 router.post('/message', async (req, res) => {
   try {
+    // Garde-fou: detecter une mauvaise configuration AVANT d'appeler le RAG
+    if (!process.env.OPENAI_API_KEY) {
+      logger.warn('Chatbot called but OPENAI_API_KEY is not configured');
+      return res.status(503).json({
+        error: 'Chatbot non configure',
+        code: 'OPENAI_NOT_CONFIGURED',
+        message: 'La cle OPENAI_API_KEY est manquante dans la configuration. Ajoutez-la dans les variables d\'environnement Railway.',
+        response: 'Desole, le service est temporairement indisponible. Contactez le service client au 011 76 32 29.'
+      });
+    }
+
     const { message, sessionId, contactId } = req.body;
 
     if (!message) {
@@ -53,8 +64,28 @@ router.post('/message', async (req, res) => {
       message: req.body.message?.substring(0, 50)
     });
 
+    // Detecte les cas connus pour renvoyer un 503 plus parlant qu'un 500 generique
+    const errMsg = String(error.message || '');
+    if (/OPENAI_API_KEY|api[_ ]?key|invalid_api_key|incorrect api key/i.test(errMsg)) {
+      return res.status(503).json({
+        error: 'Cle OpenAI invalide ou manquante',
+        code: 'OPENAI_NOT_CONFIGURED',
+        message: errMsg,
+        response: 'Desole, le service est temporairement indisponible. Contactez le service client au 011 76 32 29.'
+      });
+    }
+    if (/quota|rate.?limit|insufficient_quota/i.test(errMsg)) {
+      return res.status(503).json({
+        error: 'Quota OpenAI epuise',
+        code: 'OPENAI_QUOTA_EXCEEDED',
+        message: errMsg,
+        response: 'Desole, le service est momentanement sature. Reessayez dans quelques instants.'
+      });
+    }
+
     res.status(500).json({
       error: 'Erreur lors du traitement du message',
+      message: errMsg,
       response: 'Desole, une erreur est survenue. Veuillez reessayer ou contacter le service client au 011 76 32 29.'
     });
   }
