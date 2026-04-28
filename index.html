@@ -3149,7 +3149,7 @@
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
-                    const token = localStorage.getItem('token');
+                    const token = authStore.getToken();
                     const resp = await fetch('/api/templates/upload-media', {
                         method: 'POST',
                         headers: { 'Authorization': 'Bearer ' + token },
@@ -3246,7 +3246,7 @@
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
-                    const token = localStorage.getItem('token');
+                    const token = authStore.getToken();
                     const resp = await fetch('/api/templates/upload-media', {
                         method: 'POST',
                         headers: { 'Authorization': 'Bearer ' + token },
